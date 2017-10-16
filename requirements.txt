@@ -1,1 +1,2 @@
 matchpy
+mypy-extensions=0.3.0

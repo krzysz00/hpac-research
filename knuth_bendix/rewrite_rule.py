@@ -19,7 +19,9 @@
 Matchpy generally has decent types, but they need a bit of specialization
 and other elbow grease to make everything behave"""
 import matchpy
+import math
 from matchpy import Expression
+from typing import cast, Union, Iterable, Optional
 
 
 class RewriteRule(object):
@@ -39,8 +41,10 @@ class RewriteRule(object):
         self.right = right
         lhs = matchpy.Pattern(left)
 
-        def rhs(**kwargs):
-            return matchpy.substitute(self.right, kwargs)
+        def rhs(**kwargs: Expression) -> Expression:
+            return cast(Expression,
+                        matchpy.substitute(self.right,
+                                           matchpy.Substitution(kwargs)))
 
         self._replacementRule = matchpy.ReplacementRule(lhs, rhs)
 
@@ -54,3 +58,40 @@ class RewriteRule(object):
     def __str__(self) -> str:
         """Return a human-readable depiction of this rule"""
         return "{left!s} -> {right!s}".format(**self.__dict__)
+
+
+def _replace_all(expr: Expression,
+                 rules: Iterable[matchpy.ReplacementRule],
+                 max_count: Union[int, float]=math.inf) -> Expression:
+    ret = matchpy.replace_all(expr, rules, max_count=max_count)
+    if isinstance(ret, Expression):
+        return ret
+    else:
+        raise(TypeError("Expected rewrite rules to generate expression, got a {}" # NOQA
+                        .format(type(ret))))
+
+
+def apply_once(expr: Expression, rule: RewriteRule) -> Expression:
+    """Apply :arg:`rule` to :arg:`rule` once if possible.
+
+    :param expr: Expression to replace in.
+    :param rule: Rule to maybe apply to the expression
+    :returns: Expression with rule applied once, if possible"""
+    return cast(Expression, _replace_all(expr, [rule._replacementRule],
+                                         max_count=1))
+
+
+def apply_all(expr: Expression, rules: Iterable[RewriteRule],
+              max_count: Optional[int]=None) -> Expression:
+    """Apply :arg:`rules` to :arg:`rule` until that's impossible
+
+    :param expr: Expression to replace in.
+    :param rule: Rule to maybe apply to the expression
+    :param max_count: Maximum number of times to apply rules, if any
+    :returns: Expression with rule applied as much as possible"""
+    internal = [rule._replacementRule for rule in rules]
+    if max_count is None:
+        return cast(Expression, _replace_all(expr, internal))
+    else:
+        return cast(Expression, _replace_all(expr, internal,
+                                             max_count=max_count))

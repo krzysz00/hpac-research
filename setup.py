@@ -174,12 +174,26 @@ def _test():
     return pytest.main(PYTEST_FLAGS + [TESTS_DIRECTORY])
 
 
+def _typecheck():
+    """Run the type checker
+
+    :return: exit code
+    """
+    # We need to do subprocesses here also, for now
+    process = subprocess.Popen(['mypy', CODE_DIRECTORY],
+                               env=dict(os.environ, MYPYPATH=b"mypy_stubs"))
+    retcode = process.wait()
+    if retcode == 0:
+        print_success_message('No type errors')
+    return retcode
+
+
 def _test_all():
     """Run lint and tests.
 
     :return: exit code
     """
-    return _lint() + _test()
+    return _lint() + _typecheck() + _test()
 
 
 # The following code is to allow tests to be run with `python setup.py test'.
@@ -229,7 +243,8 @@ setup_dict = dict(
         'setuptools_scm'
     ],
     install_requires=[
-        'matchpy'
+        'matchpy',
+        'mypy-extensions'
     ],
     # Allow tests to be run with `python setup.py test'.
     tests_require=[

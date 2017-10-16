@@ -11,7 +11,7 @@ sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
 
 from setup import (
     setup_dict, get_project_files, print_success_message,
-    print_failure_message, _lint, _test, _test_all,
+    print_failure_message, _lint, _typecheck, _test, _test_all,
     CODE_DIRECTORY, DOCS_DIRECTORY, TESTS_DIRECTORY, PYTEST_FLAGS) # NOQA
 
 from paver.easy import options, task, needs, consume_args # NOQA
@@ -97,6 +97,12 @@ def sdist():
 def test():
     """Run the unit tests."""
     raise SystemExit(_test())
+
+
+@task
+def typecheck():
+    """Run the typechecker"""
+    raise SystemExit(_typecheck())
 
 
 @task
