@@ -63,3 +63,12 @@ def test_apply_all_many_rules(inv_pattern):
 
     ret = apply_all(expr, [inv_rule, g_rule])
     assert ret == a
+
+
+def test_new_variable_failure():
+    x = make_dot_variable('x')
+    y = make_dot_variable('y')
+    z = make_dot_variable('z')
+    f = Operation.new('f', Arity.binary)
+    with pytest.raises(ValueError):
+        RewriteRule(f(x, y), f(z, x))

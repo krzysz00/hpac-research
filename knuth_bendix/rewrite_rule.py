@@ -20,7 +20,7 @@ Matchpy generally has decent types, but they need a bit of specialization
 and other elbow grease to make everything behave"""
 import matchpy
 import math
-from matchpy import Expression
+from matchpy import Expression, get_variables
 from typing import cast, Union, Iterable, Optional
 
 
@@ -37,6 +37,8 @@ class RewriteRule(object):
         :param right: Expression to rewrite to.
         This must have same variables as :arg:`left`
         """
+        if not get_variables(right) <= get_variables(left):
+            raise(ValueError("Variables on right of rule with no equivalent on the left")) # NOQA
         self.left = left
         self.right = right
         lhs = matchpy.Pattern(left)
