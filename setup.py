@@ -179,10 +179,13 @@ def _typecheck():
 
     :return: exit code
     """
+    import mypy.api
     # We need to do subprocesses here also, for now
-    process = subprocess.Popen(['mypy', CODE_DIRECTORY],
-                               env=dict(os.environ, MYPYPATH=b"mypy_stubs"))
-    retcode = process.wait()
+    out, err, retcode = mypy.api.run([CODE_DIRECTORY])
+    if out:
+        print(out)
+    if err:
+        print(err, file=sys.stderr)
     if retcode == 0:
         print_success_message('No type errors')
     return retcode
