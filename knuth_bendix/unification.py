@@ -17,7 +17,7 @@
 """Unification of two terms and associated functionality"""
 import matchpy
 from matchpy import (Expression, get_variables, get_head, rename_variables,
-                     Substitution, substitute)
+                     Substitution, substitute, Wildcard)
 from typing import Optional, List
 from collections import deque
 
@@ -51,7 +51,7 @@ def maybe_add_substitution(sub: Substitution, var: str,
     or None if this isn't possible"""
     new_substitutions = {var: replacement}
     for v, term in sub.items():
-        new_term = matchpy.substitute(term, Substitution({var: replacement}))
+        new_term = substitute(term, Substitution({var: replacement}))
         if not isinstance(new_term, Expression):
             return None  # Lists are a problem for us
         if matchpy.contains_variables_from_set(new_term, {v}):
@@ -79,13 +79,13 @@ def unify_expressions(left: Expression,
         t1, t2 = to_operate.popleft()
         if t1 == t2:
             continue
-        elif isinstance(t1, matchpy.Wildcard):
+        elif isinstance(t1, Wildcard):
             new_subs = maybe_add_substitution(ret, t1.variable_name, t2)
             if new_subs is not None:
                 ret = new_subs
             else:
                 return None
-        elif isinstance(t2, matchpy.Wildcard):
+        elif isinstance(t2, Wildcard):
             new_subs = maybe_add_substitution(ret, t2.variable_name, t1)
             if new_subs is not None:
                 ret = new_subs
@@ -110,13 +110,39 @@ def find_overlaps(term: Expression, within: Expression) -> List[Expression]:
     using the substitution for the relevant subterms"""
     term = uniqify_variables(term, within)
     ret = []
-    for subterm, position in within.preorder_iter():
-        sigma = unify_expressions(term, subterm)
-        if sigma is not None:
-            if all([t != term for t in sigma.values()]):
+    for subterm, _ in within.preorder_iter():
+        if not isinstance(subterm, Wildcard):
+            sigma = unify_expressions(term, subterm)
+            if sigma is not None:
                 overlapped_term = substitute(within, sigma)
                 if isinstance(overlapped_term, Expression):
                     ret.append(overlapped_term)
                 else:
                     raise(ValueError("Substitution returned list of expressions"))  # NOQA
     return ret
+
+
+def equal_mod_renaming(t1: Expression, t2: Expression) -> bool:
+    """Determines if :ref:`t1` and :ref:`t2 are equal up to variable renaming.
+
+    :returns: Indication of the two expressions are syntactically equal"""
+    if len(get_variables(t1)) != len(get_variables(t2)):
+        return False
+    sub = unify_expressions(t1, t2)
+    return sub is not None and all((isinstance(t, Wildcard)
+                                    for t in sub.values()))
+
+
+def proper_contains(term: Expression,
+                    within: Expression) -> bool:
+    """Determines if :ref:`term` is a proper subterm of :ref:`within`
+    but :ref:`term` != :ref:`within`, up to renaming of variables.
+
+    :param term: Term to find
+    :param within: Term to look in
+    :returns: Whether term < within under containment"""
+    for subterm, position in within.preorder_iter():
+        if position:  # Root is ()
+            if equal_mod_renaming(term, subterm):
+                return True
+    return False

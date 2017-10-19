@@ -19,7 +19,9 @@ from knuth_bendix.unification import (
     uniqify_variables,
     maybe_add_substitution,
     unify_expressions,
-    find_overlaps)
+    find_overlaps,
+    equal_mod_renaming,
+    proper_contains)
 from matchpy import (Operation, Arity, make_dot_variable, Symbol,
                      get_variables, substitute)
 
@@ -88,7 +90,41 @@ def test_unify_expressions(left, right, expected):
 
 @pytest.mark.parametrize("term,within,expected", [
     (f(a, x), f(f(x, y), z), [f(f(a, y), z)]),
-    (f(g(x), x), f(f(x, y), z), [f(f(g(y), y), z)])
+    (f(g(x), x), f(f(x, y), z), [f(f(g(y), y), z)]),
+    (g(g(x)), f(y, z), []),
+    (g(x), g(y), [g(y)])
 ])
 def test_find_overlaps(term, within, expected):
     assert find_overlaps(term, within) == expected
+
+
+@pytest.mark.parametrize("t1,t2,expected", [
+    (x, x, True),
+    (x, y, True),
+    (g(x), g(y), True),
+    (g(x), g(x), True),
+    (f(x, y), f(y, z), True),
+    (a, b, False),
+    (f(x, y), f(z, a), False),
+    (f(x, x), f(y, z), False),
+    (f(x, y), g(z), False),
+    (f(f(x, y), z), f(x, f(y, z)), False),
+    (g(a), g(b), False),
+])
+def test_equal_mod_renaming(t1, t2, expected):
+    assert equal_mod_renaming(t1, t2) == expected
+
+
+@pytest.mark.parametrize("term,within,expected", [
+    (x, x, False),
+    (x, y, False),
+    (x, g(x), True),
+    (x, g(y), True),
+    (f(x, y), f(y, z), False),
+    (f(x, y), g(f(y, z)), True),
+    (a, b, False),
+    (a, g(a), True),
+    (f(a, b), f(f(a, b), y), True),
+])
+def test_proper_contains(term, within, expected):
+    assert proper_contains(term, within) == expected
