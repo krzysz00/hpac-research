@@ -18,14 +18,16 @@ import pytest
 from knuth_bendix.unification import (
     uniqify_variables,
     maybe_add_substitution,
-    unify_expressions)
+    unify_expressions,
+    find_overlaps)
 from matchpy import (Operation, Arity, make_dot_variable, Symbol,
-                     get_variables)
+                     get_variables, substitute)
 
 plus = Operation.new('+', Arity.polyadic, 'plus', infix=True,
                      associative=True)
 f = Operation.new('f', Arity.binary)
 g = Operation.new('g', Arity.unary)
+h = Operation.new('h', Arity.binary)
 x = make_dot_variable('x')
 y = make_dot_variable('y')
 z = make_dot_variable('z')
@@ -79,3 +81,14 @@ def test_maybe_add_substitution(subs, var, rule, expected):
 ])
 def test_unify_expressions(left, right, expected):
     assert unify_expressions(left, right) == expected
+    sub = unify_expressions(left, right)
+    if sub is not None:
+        assert substitute(left, sub) == substitute(right, sub)
+
+
+@pytest.mark.parametrize("term,within,expected", [
+    (f(a, x), f(f(x, y), z), [f(f(a, y), z)]),
+    (f(g(x), x), f(f(x, y), z), [f(f(g(y), y), z)])
+])
+def test_find_overlaps(term, within, expected):
+    assert find_overlaps(term, within) == expected

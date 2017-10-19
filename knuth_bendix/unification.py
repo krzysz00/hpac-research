@@ -17,8 +17,8 @@
 """Unification of two terms and associated functionality"""
 import matchpy
 from matchpy import (Expression, get_variables, get_head, rename_variables,
-                     Substitution)
-from typing import Optional
+                     Substitution, substitute)
+from typing import Optional, List
 from collections import deque
 
 
@@ -98,4 +98,25 @@ def unify_expressions(left: Expression,
             to_operate.extend(zip(t1.operands, t2.operands))
         else:
             return None
+    return ret
+
+
+def find_overlaps(term: Expression, within: Expression) -> List[Expression]:
+    """Find all overlaps between :ref:`term` and a subterm of :ref:`within'.
+
+    :param term: Expression to look forbid
+    :param within: Expression to try and put :ref:`term` in to
+    :returns: For every overlap, :ref:`within` unified with :ref:`term`,
+    using the substitution for the relevant subterms"""
+    term = uniqify_variables(term, within)
+    ret = []
+    for subterm, position in within.preorder_iter():
+        sigma = unify_expressions(term, subterm)
+        if sigma is not None:
+            if all([t != term for t in sigma.values()]):
+                overlapped_term = substitute(within, sigma)
+                if isinstance(overlapped_term, Expression):
+                    ret.append(overlapped_term)
+                else:
+                    raise(ValueError("Substitution returned list of expressions"))  # NOQA
     return ret
