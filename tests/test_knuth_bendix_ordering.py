@@ -40,3 +40,4 @@ order = KnuthBendixOrdering({times: 0, i: 0, e: 1}, 1,
 ])
 def test_knuth_bendix_order(left, right):
     assert order(left, right)
+    assert not order(right, left)

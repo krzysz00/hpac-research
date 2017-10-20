@@ -21,7 +21,7 @@ and other elbow grease to make everything behave"""
 import matchpy
 import math
 from matchpy import Expression, get_variables
-from typing import cast, Union, Iterable, Optional
+from typing import cast, Union, Iterable, Optional, Iterator, Tuple
 
 
 class RewriteRule(object):
@@ -97,3 +97,18 @@ def apply_all(expr: Expression, rules: Iterable[RewriteRule],
     else:
         return cast(Expression, _replace_all(expr, internal,
                                              max_count=max_count))
+
+
+def apply_all_once(expr: Expression,
+                   rules: Iterable[RewriteRule]) ->\
+                   Iterator[Tuple[Expression, RewriteRule]]:
+    """Attempt to apply each of the :ref:`rules` to :ref:`expr`.
+
+    :param expr: Expression to pattern match on.
+    :param rules: Rules to try and apply.
+    :returns: A generator of (new_expression, rule) pairs.
+    If the rewrite rule didn't do anything, the expression is not returned"""
+    for rule in rules:
+        new_expr = apply_once(expr, rule)
+        if expr != new_expr:
+            yield ((new_expr, rule))

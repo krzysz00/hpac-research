@@ -15,7 +15,8 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 import pytest
-from knuth_bendix.rewrite_rule import RewriteRule, apply_all, apply_once
+from knuth_bendix.rewrite_rule import (RewriteRule, apply_all, apply_once,
+                                       apply_all_once)
 from matchpy import Operation, make_dot_variable, Symbol, Arity
 
 
@@ -78,6 +79,10 @@ def test_apply_all_many_rules(inv_pattern):
 
     ret = apply_all(expr, [inv_rule, g_rule])
     assert ret == a
+
+    assert (list(apply_all_once(expr, [inv_rule, g_rule]))
+            == [(g(g(g(inv(a), b), c), d), inv_rule),
+                (inv(g(g(inv(a), b), c)), g_rule)])
 
 
 def test_new_variable_failure():

@@ -95,7 +95,7 @@ def test_unify_expressions(left, right, expected):
     (g(x), g(y), [g(y)])
 ])
 def test_find_overlaps(term, within, expected):
-    assert find_overlaps(term, within) == expected
+    assert list(find_overlaps(term, within)) == expected
 
 
 @pytest.mark.parametrize("t1,t2,expected", [

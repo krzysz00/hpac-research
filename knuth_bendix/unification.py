@@ -18,7 +18,7 @@
 import matchpy
 from matchpy import (Expression, get_variables, get_head, rename_variables,
                      Substitution, substitute, Wildcard)
-from typing import Optional, List
+from typing import Optional, Iterator
 from collections import deque
 
 
@@ -101,7 +101,8 @@ def unify_expressions(left: Expression,
     return ret
 
 
-def find_overlaps(term: Expression, within: Expression) -> List[Expression]:
+def find_overlaps(term: Expression, within: Expression) ->\
+                  Iterator[Expression]:
     """Find all overlaps between :ref:`term` and a subterm of :ref:`within'.
 
     :param term: Expression to look forbid
@@ -109,17 +110,15 @@ def find_overlaps(term: Expression, within: Expression) -> List[Expression]:
     :returns: For every overlap, :ref:`within` unified with :ref:`term`,
     using the substitution for the relevant subterms"""
     term = uniqify_variables(term, within)
-    ret = []
     for subterm, _ in within.preorder_iter():
         if not isinstance(subterm, Wildcard):
             sigma = unify_expressions(term, subterm)
             if sigma is not None:
                 overlapped_term = substitute(within, sigma)
                 if isinstance(overlapped_term, Expression):
-                    ret.append(overlapped_term)
+                    yield overlapped_term
                 else:
                     raise(ValueError("Substitution returned list of expressions"))  # NOQA
-    return ret
 
 
 def equal_mod_renaming(t1: Expression, t2: Expression) -> bool:

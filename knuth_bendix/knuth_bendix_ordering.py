@@ -124,14 +124,15 @@ class KnuthBendixOrdering(object):
             s_head = to_operator(s)
             t_head = to_operator(t)
             # The f(f(... f(x))) == x condition
-            if self.arities[s_head] == 1:
+            if s_head is not None and self.arities[s_head] == 1:
                 s_prime = cast(Operation, s).operands[0]
-                while True:
+                iterating = True
+                while iterating:
                     new_head = to_operator(s_prime)
+                    if new_head != s_head:
+                        iterating = False
                     if equal_mod_renaming(s_prime, t):
                         return True
-                    if new_head != s_head:
-                        break
                     s_prime = cast(Operation, s_prime).operands[0]
 
             if s_head != t_head:
