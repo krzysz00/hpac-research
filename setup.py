@@ -247,7 +247,8 @@ setup_dict = dict(
     ],
     install_requires=[
         'matchpy',
-        'mypy-extensions'
+        'mypy-extensions',
+        'multiset'
     ],
     # Allow tests to be run with `python setup.py test'.
     tests_require=[

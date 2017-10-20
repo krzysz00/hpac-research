@@ -1,2 +1,3 @@
 matchpy
 mypy-extensions=0.3.0
+multiset==2.0.2

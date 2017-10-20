@@ -6,7 +6,7 @@ from . import expressions
 from typing import Dict, Union, Tuple
 from multiset import Multiset
 
-VariableReplacement = Union[Tuple['expressions.Expression', ...], Multiset, 'expressions.Expression']
+VariableReplacement = Union[Tuple['expressions.Expression', ...], Multiset['expressions.Expression'], 'expressions.Expression']
 class Substitution(dict):
     def try_add_variable(self, variable_name: str, replacement: VariableReplacement) -> None: ...
     def union_with_variable(self, variable: str, replacement: VariableReplacement) -> Substitution: ...
