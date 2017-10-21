@@ -138,7 +138,7 @@ class KnuthBendixOrdering(object):
             if s_head != t_head:
                 return (s_head, t_head) in self.op_gt
             else:
-                if isinstance(s_head, Symbol):
+                if s_head is None or isinstance(s_head, Symbol):
                     return False
                 elif isinstance(s, Operation) and isinstance(t, Operation):
                     for i in range(0, self.arities[s_head]):
@@ -149,5 +149,6 @@ class KnuthBendixOrdering(object):
                         else:
                             return False
                 else:
-                    raise(TypeError("Ok, this is literally impossible"))
+                    raise(TypeError("Ok, this is literally impossible. type(s_head) == {}, type(t_head) == {}".format(  # NOQA
+                                    type(s_head), type(t_head))))
         return False

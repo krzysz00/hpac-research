@@ -130,7 +130,7 @@ class RewriteSystem(object):
         iterating = True
         while iterating:
             while self._canonicalize_system_step(order):
-                pass
+                print("Canonicalizing")
             new_rules = []
             for r1 in self.rules:
                 for r2 in self.rules:
@@ -142,3 +142,4 @@ class RewriteSystem(object):
                             new_rules.append(RewriteRule(s_prime, t_prime))
             iterating = bool(new_rules)
             self.rules.extend(new_rules)
+            print("New rules: ", list(map(str, new_rules)))
