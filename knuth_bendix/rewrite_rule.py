@@ -67,7 +67,7 @@ class RewriteRule(object):
         return "{left!s} -> {right!s}".format(**self.__dict__)
 
 
-class RewriteRuleList(object):
+class RewriteRuleList(Iterable[RewriteRule]):
     """A list of :cls:`RewriteRule`s, supporting efficient replacement,
     through matchpy's :cls:`ManyToOneMatcher`"""
 

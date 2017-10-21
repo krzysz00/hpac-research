@@ -17,13 +17,11 @@
 """An implementation of a rewrite-rule system,
 including the Knuth-Bendix completion algorithm"""
 
-from .rewrite_rule import RewriteRule, apply_all, apply_once, apply_all_once
+from .rewrite_rule import RewriteRule, RewriteRuleList
 from .unification import (find_overlaps, equal_mod_renaming,
                           proper_contains)
 
 from matchpy import Expression
-
-import copy
 
 from typing import List, Tuple, Callable, TypeVar, Iterable
 
@@ -47,14 +45,14 @@ class RewriteSystem(object):
 
         :param rules: A list of rules to initialize the system with.
         Will be shallowly copied"""
-        self.rules = copy.copy(rules)
+        self.rules = RewriteRuleList(*rules)
 
     def normalize(self, expr: Expression) -> Expression:
         """Rewrite :ref:`expr` as much as possible with the system's rules.
 
         :param expr: Expression to rewrite. Will be unmodified.
         :returns: A normalized expression"""
-        return apply_all(expr, self.rules)
+        return self.rules.apply_all(expr)
 
     @staticmethod
     def orient(s: Expression, t: Expression,
@@ -96,31 +94,49 @@ class RewriteSystem(object):
         :returns: True if the system was modified, False otherwise"""
         # Normalize RHSs
         for idx, r in enumerate(self.rules):
-            new_right = apply_all(r.right, self.rules)
+            new_right = self.normalize(r.right)
             if not equal_mod_renaming(r.right, new_right):
-                self.rules[idx] = RewriteRule(r.left, new_right)
+                self.rules.insert(idx, RewriteRule(r.left, new_right))
                 return True
 
         # Step normalization of LHSs if possible
         for idx, r in enumerate(self.rules):
-            for new_e, other_r in apply_all_once(r.left, self.rules):
+            for other_r, new_e in self.rules.apply_each_once(r.left).items():
                 if (proper_contains(other_r.left, r.left)
                     or (equal_mod_renaming(other_r.left, r.left)
                         and order(r.right, other_r.right))):
                     if equal_mod_renaming(new_e, r.right):
                         # We're about to introduce a = a
-                        del self.rules[idx]
+                        self.rules.delete(idx)
                         return True
                     else:
                         u, t = self.orient(new_e, r.right, order)
-                        self.rules[idx] = RewriteRule(u, t)
+                        self.rules.insert(idx, RewriteRule(u, t))
                         return True
 
         # Eliminate redundant rules
         for idx, r in enumerate(self.rules):
             if equal_mod_renaming(r.left, r.right):
-                del self.rules[idx]
+                self.rules.delete(idx)
                 return True
+        return False
+
+    def _find_new_rule(self, order: GtOrder[Expression]) -> bool:
+        """Find a new rule based on a critical pair"""
+        for r1 in self.rules:
+            for r2 in self.rules:
+                for expr in find_overlaps(r1.left, r2.left):
+                    rule_finds = self.rules.apply_each_once(expr, [r1, r2])
+                    if r1 not in rule_finds or r2 not in rule_finds:
+                        print("Expression is ", str(expr))
+                        continue
+                    s = self.normalize(rule_finds[r1])
+                    t = self.normalize(rule_finds[r2])
+                    if not equal_mod_renaming(s, t):
+                        s_prime, t_prime = self.orient(s, t, order)
+                        print("New rule: ", str(s_prime), "->", str(t_prime))
+                        self.rules.append(RewriteRule(s_prime, t_prime))
+                        return True
         return False
 
     def complete(self, order: GtOrder[Expression]) -> None:
@@ -128,18 +144,9 @@ class RewriteSystem(object):
 
         """
         iterating = True
+        while self._canonicalize_system_step(order):
+            print("Initial canonicalize")
         while iterating:
+            iterating = self._find_new_rule(order)
             while self._canonicalize_system_step(order):
                 print("Canonicalizing")
-            new_rules = []
-            for r1 in self.rules:
-                for r2 in self.rules:
-                    for expr in find_overlaps(r1.left, r2.left):
-                        s = self.normalize(apply_once(expr, r1))
-                        t = self.normalize(apply_once(expr, r2))
-                        if not equal_mod_renaming(s, t):
-                            s_prime, t_prime = self.orient(s, t, order)
-                            new_rules.append(RewriteRule(s_prime, t_prime))
-            iterating = bool(new_rules)
-            self.rules.extend(new_rules)
-            print("New rules: ", list(map(str, new_rules)))
