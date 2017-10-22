@@ -19,7 +19,7 @@ import matchpy
 from matchpy import (Expression, get_variables, get_head, rename_variables,
                      Substitution, Wildcard)
 from matchpy import substitute as _substitute
-from typing import Optional, Iterator, Tuple, Deque  # noqa: F401
+from typing import Optional, Iterator, Tuple, Deque, Dict  # noqa: F401
 from collections import deque
 
 
@@ -32,6 +32,23 @@ def substitute(term: Expression, substitution: Substitution) -> Expression:
     return ret
 
 
+def unique_variables_map(expr: Expression,
+                         to_avoid: Expression) -> Dict[str, str]:
+    """Show what should be renamed in :ref:`expr'
+    so it has no names in common with :ref:`to_avoid`
+
+    :param expr: Expression to rename
+    :param to_avoid: Expression we want to not collide with
+    :returns: Dictionary of variable substitutons"""
+    ret = {}  # type: Dict[str, str]
+    bad_vars = get_variables(expr) & get_variables(to_avoid)
+    for name in bad_vars:
+        ret[name] = '_' + name
+        while ret[name] in bad_vars:
+            ret[name] = '_' + ret[name]
+    return ret
+
+
 def uniqify_variables(expr: Expression, to_avoid: Expression) -> Expression:
     """Rename the variables in :ref:`expr' so it has no names in common with
     :ref:`to_avoid`
@@ -39,12 +56,8 @@ def uniqify_variables(expr: Expression, to_avoid: Expression) -> Expression:
     :param expr: Expression to rename
     :param to_avoid: Expression we want to not collide with
     :returns: :ref:`expr` with the naming collisions fixed"""
-    bad_vars = get_variables(expr) & get_variables(to_avoid)
-    if not bad_vars:
-        return expr
-    else:
-        names = {n: '_' + n for n in bad_vars}
-        return rename_variables(expr, names)
+    names = unique_variables_map(expr, to_avoid)
+    return rename_variables(expr, names)
 
 
 def maybe_add_substitution(sub: Substitution, var: str,

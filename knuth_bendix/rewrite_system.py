@@ -19,9 +19,10 @@ including the Knuth-Bendix completion algorithm"""
 
 from .rewrite_rule import RewriteRule, RewriteRuleList
 from .unification import (find_overlaps, equal_mod_renaming,
-                          proper_contains)
+                          proper_contains, unique_variables_map,
+                          unify_expressions, substitute)
 
-from matchpy import Expression
+from matchpy import Expression, rename_variables, get_variables
 from itertools import chain, count
 import heapq
 from collections import defaultdict
@@ -126,22 +127,9 @@ class RewriteSystem(object):
         :param order: Ordering on terms to use for certain steps
         of the canonicalization procedure.
         :returns: True if the system was modified, False otherwise"""
-        # Eliminate redundant rules
-        for idx, r in enumerate(self.rules):
-            if equal_mod_renaming(r.left, r.right):
-                print("Redundant rule")
-                self.rules.delete(idx)
-                return True
-
-        # Eliminate identical rules
-        for idx1, r1 in enumerate(self.rules):
-            for idx2, r2 in enumerate(self.rules):
-                if (idx2 > idx1
-                   and equal_mod_renaming(r1.left, r2.left)
-                   and equal_mod_renaming(r1.right, r2.right)):
-                    print("Delete identical rules")
-                    self.rules.delete(idx2)
-                    return True
+        # Delete specializations and redundancies
+        if self.rules.trim_redundant_rules():
+            return True
 
         # Normalize RHSs
         for idx, r in enumerate(self.rules):
@@ -169,6 +157,7 @@ class RewriteSystem(object):
                         print("Replace", r)
                         print("with", str(u), "->", str(t))
                         return True
+
         return False
 
     def _add_critical_pairs_with(self, rule: RewriteRule) -> None:

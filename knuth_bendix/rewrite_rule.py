@@ -146,16 +146,30 @@ class RewriteRuleList(Iterable[RewriteRule]):
         :param only: If present, only record matches from the given rules.
         :returns: A map from rewrite rules to the expressions they produced.
         If a rule matches multiple times, the outermost match is returned."""
-        ret = {}  # type: Dict[RewriteRule, Expression]
         for subexpr, pos in expr.preorder_iter():
             for rule, subst in self.matcher.match(subexpr):
-                if rule not in ret and (only is None or rule in only):
+                if only is None or rule in only:
                     new_subexpr = rule.apply_match(subst)
                     new_expr = matchpy.replace(expr, pos, new_subexpr)
                     if not isinstance(new_expr, Expression):
                         raise TypeError("Result of swapping part of an expression by an expression is not an expression")  # NOQA
                     yield (rule, new_expr)
-        # return ret
+
+    def trim_redundant_rules(self) -> bool:
+        """Remove rules that are specializations of
+        or identical to rules in the set.
+
+        :returns: True if any work was done"""
+        for idx, r in enumerate(self.rules):
+            # This only considers whole-expression matches
+            for other_r, subst in self.matcher.match(r.left):
+                if other_r == r:
+                    continue
+                print("Removing redundant rule", str(r))
+                self.delete(idx)
+                self.trim_redundant_rules()
+                return True
+        return False
 
 
 def apply_once(expr: Expression, rule: RewriteRule) -> Expression:
