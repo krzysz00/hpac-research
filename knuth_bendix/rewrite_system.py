@@ -19,10 +19,9 @@ including the Knuth-Bendix completion algorithm"""
 
 from .rewrite_rule import RewriteRule, RewriteRuleList
 from .unification import (find_overlaps, equal_mod_renaming,
-                          proper_contains, unique_variables_map,
-                          unify_expressions, substitute)
+                          proper_contains)
 
-from matchpy import Expression, rename_variables, get_variables
+from matchpy import Expression
 from itertools import chain, count
 import heapq
 from collections import defaultdict
@@ -136,7 +135,8 @@ class RewriteSystem(object):
             new_right = self.normalize(r.right)
             if not equal_mod_renaming(r.right, new_right):
                 self.rules.replace(idx, RewriteRule(r.left, new_right))
-                print("Normalized right")
+                print("Normalized right:", str(r.left), "->",
+                      str(r.right), "->", new_right)
                 return True
 
         # Normalize LHSs as much as possible
@@ -148,14 +148,14 @@ class RewriteSystem(object):
                     if equal_mod_renaming(new_e, r.right):
                         # We're about to introduce a = a
                         self.rules.delete(idx)
-                        print("Left normalizing delete from", r, "to", new_e)
+                        print("Left normalizing delete:", r, "gives", new_e)
                         return True
                     else:
                         u, t = self.orient(new_e, r.right, order)
-                        self.rules.replace(idx, RewriteRule(u, t))
-                        print("Left normalizing collapse")
-                        print("Replace", r)
-                        print("with", str(u), "->", str(t))
+                        new_rule = RewriteRule(u, t)
+                        self.rules.replace(idx, new_rule)
+                        print("Left normalizing collapse: replace", r,
+                              "with", new_rule)
                         return True
 
         return False
@@ -191,6 +191,4 @@ class RewriteSystem(object):
                 self.rules.append(new_rule)
                 self._add_critical_pairs_with(new_rule)
                 while self._canonicalize_system_step(order):
-                    print("Canonicalizing")
-        while self._canonicalize_system_step(order):
-            print("Final canonicalizing")
+                    pass
