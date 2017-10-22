@@ -8,7 +8,7 @@ Information describing the project.
 package = 'knuth_bendix'
 project = "Knuth-Bendix"
 project_no_spaces = project.replace(' ', '')
-version = '0.1'
+version = '0.2'
 description = 'Knuth-Bendix completion algorithm implementation with matchpy'
 authors = ['Krzysztof Drewniak']
 authors_string = ', '.join(authors)
