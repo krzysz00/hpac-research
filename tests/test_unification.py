@@ -79,7 +79,8 @@ def test_maybe_add_substitution(subs, var, rule, expected):
     (f(x, y), g(x), None),
     (plus(x, y, z), plus(x, y), None),
     (f(f(x, y), z), f(g(x), z), None),
-    (f(x, y), f(y, x), None),
+    (f(x, y), f(y, x), {'x': y}),
+    (f(g(x), x), f(g(a), y), {'x': a, 'y': a}),
 ])
 def test_unify_expressions(left, right, expected):
     assert unify_expressions(left, right) == expected

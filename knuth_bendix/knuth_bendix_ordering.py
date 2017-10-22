@@ -133,7 +133,10 @@ class KnuthBendixOrdering(object):
                         iterating = False
                     if equal_mod_renaming(s_prime, t):
                         return True
-                    s_prime = cast(Operation, s_prime).operands[0]
+                    if isinstance(s_prime, Operation):
+                        s_prime = s_prime.operands[0]
+                    else:
+                        iterating = False
 
             if s_head != t_head:
                 return (s_head, t_head) in self.op_gt

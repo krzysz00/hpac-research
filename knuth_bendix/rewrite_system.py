@@ -22,12 +22,44 @@ from .unification import (find_overlaps, equal_mod_renaming,
                           proper_contains)
 
 from matchpy import Expression
+from itertools import chain, count
+import heapq
+from collections import defaultdict
 
-from typing import List, Tuple, Callable, TypeVar, Iterable
+from typing import (List, Tuple, Callable, TypeVar, Iterable,  # noqa: F401
+                    Generic, DefaultDict)
 
 _T = TypeVar('_T')
+
 GtOrder = Callable[[_T, _T], bool]
 """Ordering such that f(a, b) returns if a > b"""
+
+
+class Heap(Generic[_T]):
+    """Min-heap wrapper requiring a key function"""
+    def __init__(self, key: Callable[[_T], int]) -> None:
+        self.key = key
+        self.heap = []  # type: List[Tuple[int, int, _T]]
+        self.counter = count()
+
+    def push(self, item: _T) -> None:
+        """Insert into the heap, computing the priority via key."""
+        priority = self.key(item)
+        count = next(self.counter)
+        heapq.heappush(self.heap, (priority, count, item))
+
+    def popmin(self) -> _T:
+        """Pop off the smallest item from the heap"""
+        _, _, item = heapq.heappop(self.heap)
+        return item
+
+    def __bool__(self) -> bool:
+        return bool(self.heap)
+
+
+def subexpression_count(expr: Expression) -> int:
+    """Count the number of nodes in the tree formed by :param:`expr`"""
+    return len(list(expr.preorder_iter()))
 
 
 class CompletionFailure(Exception):
@@ -46,6 +78,8 @@ class RewriteSystem(object):
         :param rules: A list of rules to initialize the system with.
         Will be shallowly copied"""
         self.rules = RewriteRuleList(*rules)
+        self.critical_pairs = Heap(lambda e: subexpression_count(e[0]) +
+                                   subexpression_count(e[1]))  # type: Heap[Tuple[Expression, Expression]]  # NOQA
 
     def normalize(self, expr: Expression) -> Expression:
         """Rewrite :ref:`expr` as much as possible with the system's rules.
@@ -92,61 +126,82 @@ class RewriteSystem(object):
         :param order: Ordering on terms to use for certain steps
         of the canonicalization procedure.
         :returns: True if the system was modified, False otherwise"""
+        # Eliminate redundant rules
+        for idx, r in enumerate(self.rules):
+            if equal_mod_renaming(r.left, r.right):
+                print("Redundant rule")
+                self.rules.delete(idx)
+                return True
+
+        # Eliminate identical rules
+        for idx1, r1 in enumerate(self.rules):
+            for idx2, r2 in enumerate(self.rules):
+                if (idx2 > idx1
+                   and equal_mod_renaming(r1.left, r2.left)
+                   and equal_mod_renaming(r1.right, r2.right)):
+                    print("Delete identical rules")
+                    self.rules.delete(idx2)
+                    return True
+
         # Normalize RHSs
         for idx, r in enumerate(self.rules):
             new_right = self.normalize(r.right)
             if not equal_mod_renaming(r.right, new_right):
-                self.rules.insert(idx, RewriteRule(r.left, new_right))
+                self.rules.replace(idx, RewriteRule(r.left, new_right))
+                print("Normalized right")
                 return True
 
-        # Step normalization of LHSs if possible
+        # Normalize LHSs as much as possible
         for idx, r in enumerate(self.rules):
-            for other_r, new_e in self.rules.apply_each_once(r.left).items():
+            for other_r, new_e in self.rules.apply_each_once(r.left):
                 if (proper_contains(other_r.left, r.left)
                     or (equal_mod_renaming(other_r.left, r.left)
                         and order(r.right, other_r.right))):
                     if equal_mod_renaming(new_e, r.right):
                         # We're about to introduce a = a
                         self.rules.delete(idx)
+                        print("Left normalizing delete from", r, "to", new_e)
                         return True
                     else:
                         u, t = self.orient(new_e, r.right, order)
-                        self.rules.insert(idx, RewriteRule(u, t))
-                        return True
-
-        # Eliminate redundant rules
-        for idx, r in enumerate(self.rules):
-            if equal_mod_renaming(r.left, r.right):
-                self.rules.delete(idx)
-                return True
-        return False
-
-    def _find_new_rule(self, order: GtOrder[Expression]) -> bool:
-        """Find a new rule based on a critical pair"""
-        for r1 in self.rules:
-            for r2 in self.rules:
-                for expr in find_overlaps(r1.left, r2.left):
-                    rule_finds = self.rules.apply_each_once(expr, [r1, r2])
-                    if r1 not in rule_finds or r2 not in rule_finds:
-                        print("Expression is ", str(expr))
-                        continue
-                    s = self.normalize(rule_finds[r1])
-                    t = self.normalize(rule_finds[r2])
-                    if not equal_mod_renaming(s, t):
-                        s_prime, t_prime = self.orient(s, t, order)
-                        print("New rule: ", str(s_prime), "->", str(t_prime))
-                        self.rules.append(RewriteRule(s_prime, t_prime))
+                        self.rules.replace(idx, RewriteRule(u, t))
+                        print("Left normalizing collapse")
+                        print("Replace", r)
+                        print("with", str(u), "->", str(t))
                         return True
         return False
+
+    def _add_critical_pairs_with(self, rule: RewriteRule) -> None:
+        for other_rule in self.rules:
+            for expr in chain(find_overlaps(rule.left, other_rule.left),
+                              find_overlaps(other_rule.left, rule.left)):
+                matches = defaultdict(list)  # type: DefaultDict[RewriteRule, List[Expression]] # NOQA
+                for r, match in self.rules.apply_each_once(expr,
+                                                           [rule, other_rule]):
+                    matches[r].append(match)
+                for s in matches[rule]:
+                    for t in matches[other_rule]:
+                        self.critical_pairs.push((s, t))
 
     def complete(self, order: GtOrder[Expression]) -> None:
         """Complete the system by the Knuth-Bendix algorithm.
 
+        :param order: An ordering to orient rules with
         """
-        iterating = True
+        for i in self.rules:
+            self._add_critical_pairs_with(i)
+
+        while self.critical_pairs:
+            s, t = self.critical_pairs.popmin()
+            s = self.normalize(s)
+            t = self.normalize(t)
+            if not equal_mod_renaming(s, t):
+                s_prime, t_prime = self.orient(s, t, order)
+                print("New rule:", str(s_prime), "->", str(t_prime))
+                new_rule = RewriteRule(s_prime, t_prime)
+                self.rules.append(new_rule)
+                self._add_critical_pairs_with(new_rule)
+                while self._canonicalize_system_step(order):
+                    print("Canonicalizing")
         while self._canonicalize_system_step(order):
-            print("Initial canonicalize")
-        while iterating:
-            iterating = self._find_new_rule(order)
-            while self._canonicalize_system_step(order):
-                print("Canonicalizing")
+            print("Final canonicalizing")

@@ -53,3 +53,4 @@ def test_group_theory_completion():
         assert any(equal_mod_renaming(r.left, s.left)
                    and equal_mod_renaming(r.right, s.right)
                    for s in system.rules)
+    assert len(expected_system) == len(system.rules)

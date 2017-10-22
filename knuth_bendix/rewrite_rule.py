@@ -22,7 +22,7 @@ import matchpy
 import warnings
 
 from matchpy import Expression, get_variables, ManyToOneMatcher
-from typing import (Iterable, Optional, Iterator, Tuple, List,
+from typing import (Iterable, Optional, Iterator, Tuple, List,  # noqa: F401
                     Container, Dict)
 
 
@@ -91,9 +91,9 @@ class RewriteRuleList(Iterable[RewriteRule]):
         for i in rules:
             self.matcher.add(i.lhs, i)
 
-    def insert(self, idx: int, rule: RewriteRule) -> None:
-        """Insert :param:`rule` at :param:`idx`"""
-        self.rules.insert(idx, rule)
+    def replace(self, idx: int, rule: RewriteRule) -> None:
+        """Replace :param:`idx` with :param:`rule`"""
+        self.rules[idx] = rule
         self._rebuild()
 
     def delete(self, idx: int) -> None:
@@ -103,6 +103,12 @@ class RewriteRuleList(Iterable[RewriteRule]):
 
     def __iter__(self) -> Iterator[RewriteRule]:
         return iter(self.rules)
+
+    def __len__(self) -> int:
+        return len(self.rules)
+
+    def __getitem__(self, idx: int) -> RewriteRule:
+        return self.rules[idx]
 
     def apply_all(self, expr: Expression,
                   max_count: Optional[int] = None) -> Expression:
@@ -133,7 +139,7 @@ class RewriteRuleList(Iterable[RewriteRule]):
 
     def apply_each_once(self, expr: Expression,
                         only: Optional[Container[RewriteRule]] = None) ->\
-                        Dict[RewriteRule, Expression]:  # NOQA
+                       Iterable[Tuple[RewriteRule, Expression]]:  # NOQA
         """Apply each rule in the set once to :param:`expr` if possible.
 
         :param expr: Expression to match against.
@@ -148,8 +154,8 @@ class RewriteRuleList(Iterable[RewriteRule]):
                     new_expr = matchpy.replace(expr, pos, new_subexpr)
                     if not isinstance(new_expr, Expression):
                         raise TypeError("Result of swapping part of an expression by an expression is not an expression")  # NOQA
-                    ret[rule] = new_expr
-        return ret
+                    yield (rule, new_expr)
+        # return ret
 
 
 def apply_once(expr: Expression, rule: RewriteRule) -> Expression:
@@ -160,9 +166,8 @@ def apply_once(expr: Expression, rule: RewriteRule) -> Expression:
     :returns: Expression with rule applied once, if possible"""
     warnings.warn("Bare apply_once is deprecated")
     ruleset = RewriteRuleList(rule)
-    results = ruleset.apply_each_once(expr)
-    if rule in results:
-        return results[rule]
+    for _, e in ruleset.apply_each_once(expr):
+        return e
     else:
         return expr
 

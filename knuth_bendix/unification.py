@@ -17,9 +17,19 @@
 """Unification of two terms and associated functionality"""
 import matchpy
 from matchpy import (Expression, get_variables, get_head, rename_variables,
-                     Substitution, substitute, Wildcard)
-from typing import Optional, Iterator
+                     Substitution, Wildcard)
+from matchpy import substitute as _substitute
+from typing import Optional, Iterator, Tuple, Deque  # noqa: F401
 from collections import deque
+
+
+def substitute(term: Expression, substitution: Substitution) -> Expression:
+    """Wrapper around :fn:`matchpy.substitute` that does a typecheck"""
+    ret = _substitute(term, substitution)
+    if not isinstance(ret, Expression):
+        raise(ValueError("Unexpected list of expressions", ret, "from",
+                         substitution, "on", term))
+    return ret
 
 
 def uniqify_variables(expr: Expression, to_avoid: Expression) -> Expression:
@@ -38,7 +48,7 @@ def uniqify_variables(expr: Expression, to_avoid: Expression) -> Expression:
 
 
 def maybe_add_substitution(sub: Substitution, var: str,
-                           replacement: Expression) -> Optional[Substitution]:
+                           replacement: Expression,) -> Optional[Substitution]:
     """Add var -> replacement to sub if possible.
 
     The addition is possible if, for all a -> b in sub,
@@ -50,10 +60,10 @@ def maybe_add_substitution(sub: Substitution, var: str,
     :returns: New substitutino set including var -> replacement
     or None if this isn't possible"""
     new_substitutions = {var: replacement}
+    if matchpy.contains_variables_from_set(replacement, {var}):
+        return None  # Occurs check failed
     for v, term in sub.items():
         new_term = substitute(term, Substitution({var: replacement}))
-        if not isinstance(new_term, Expression):
-            return None  # Lists are a problem for us
         if matchpy.contains_variables_from_set(new_term, {v}):
             return None  # Occurs check failed
         if new_term != term:
@@ -79,25 +89,39 @@ def unify_expressions(left: Expression,
         t1, t2 = to_operate.popleft()
         if t1 == t2:
             continue
-        elif isinstance(t1, Wildcard):
+        any_change = False
+        if isinstance(t1, Wildcard):
             new_subs = maybe_add_substitution(ret, t1.variable_name, t2)
             if new_subs is not None:
                 ret = new_subs
+                any_change = True
             else:
                 return None
         elif isinstance(t2, Wildcard):
             new_subs = maybe_add_substitution(ret, t2.variable_name, t1)
             if new_subs is not None:
                 ret = new_subs
+                any_change = True
             else:
                 return None
-        elif (get_head(t1) == get_head(t2) and
-              isinstance(t1, matchpy.Operation) and
-              isinstance(t2, matchpy.Operation) and
-              len(t1.operands) == len(t2.operands)):
-            to_operate.extend(zip(t1.operands, t2.operands))
+        elif (get_head(t1) == get_head(t2)
+              and isinstance(t1, matchpy.Operation)
+              and isinstance(t2, matchpy.Operation)
+              and len(t1.operands) == len(t2.operands)):
+            # Unify within functions
+            to_operate.extendleft(reversed(list(zip(t1.operands,
+                                                    t2.operands))))
         else:
             return None
+
+        if any_change:
+            new_queue = deque()  # type: Deque[Tuple[Expression, Expression]]
+            while to_operate:
+                a, b = to_operate.popleft()
+                new_a = substitute(a, ret)
+                new_b = substitute(b, ret)
+                new_queue.append((new_a, new_b))
+            to_operate = new_queue
     return ret
 
 
@@ -114,11 +138,16 @@ def find_overlaps(term: Expression, within: Expression) ->\
         if not isinstance(subterm, Wildcard):
             sigma = unify_expressions(term, subterm)
             if sigma is not None:
+                # Don't bother with trivial substitutions
+                # if not all(isinstance(t, Wildcard)
+                #           or equal_mod_renaming(t, term)
+                #           or equal_mod_renaming(t, subterm)
+                #            or equal_mod_renaming(t, within)
+                #           for t in sigma.values()):
                 overlapped_term = substitute(within, sigma)
-                if isinstance(overlapped_term, Expression):
-                    yield overlapped_term
-                else:
-                    raise(ValueError("Substitution returned list of expressions"))  # NOQA
+                assert equal_mod_renaming(substitute(term, sigma),
+                                          substitute(subterm, sigma))
+                yield overlapped_term
 
 
 def equal_mod_renaming(t1: Expression, t2: Expression) -> bool:
