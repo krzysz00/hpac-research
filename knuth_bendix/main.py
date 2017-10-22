@@ -24,6 +24,9 @@ import argparse
 import sys
 
 from knuth_bendix import metadata
+from knuth_bendix.knuth_bendix_ordering import KnuthBendixOrdering
+from knuth_bendix.rewrite_system import RewriteSystem
+from matchpy import (Operation, Arity, make_dot_variable, Symbol)
 
 
 def main(argv: List[str]) -> int:
@@ -59,8 +62,25 @@ URL: <{url}>
 
     arg_parser.parse_args(args=argv[1:])
 
-    print("Hello, World")
+    x, y, z = (make_dot_variable(t) for t in ['x', 'y', 'z'])
+    times = Operation.new('*', Arity.binary, 'times', infix=True)
+    i = Operation.new('i', Arity.unary)
+    e = Symbol('e')
+    order = KnuthBendixOrdering({times: 0, i: 0, e: 1}, 1,
+                                {(i, times), (times, e)})
+    equations = [(times(times(x, y), z), times(x, times(y, z))),
+                 (times(e, x), x),
+                 (times(i(x), x), e)]
+    print("Equations:")
+    for s, t in equations:
+        print(str(s), "=", str(t))
 
+    system = RewriteSystem.from_equations(order, equations)
+    system.complete(order)
+
+    print("Completed rules:")
+    for r in system.rules:
+        print(str(r))
     return 0
 
 
