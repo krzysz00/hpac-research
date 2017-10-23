@@ -18,6 +18,8 @@
 
 Matchpy generally has decent types, but they need a bit of specialization
 and other elbow grease to make everything behave"""
+from .utils import substitute
+
 import matchpy
 import warnings
 
@@ -50,10 +52,7 @@ class RewriteRule(object):
 
         :param subst: Substitution from a match of the left side of the rule.
         :returns: The right side of the rule with the substitution applied"""
-        ret = matchpy.substitute(self.right, subst)
-        if not isinstance(ret, Expression):
-            raise TypeError("Result of RewriteRule substitution is not an expression")  # NOQA
-        return ret
+        return substitute(self.right, subst)
 
     def __repr__(self) -> str:
         """Return a more machine-readable representation of this rule"""
@@ -159,12 +158,16 @@ class RewriteRuleList(Iterable[RewriteRule]):
         """Remove rules that are specializations of
         or identical to rules in the set.
 
-        :returns: True if any work was done"""
+        :returns: True if any rules were removed"""
         for idx, r in enumerate(self.rules):
             # This only considers whole-expression matches
             for other_r, subst in self.matcher.match(r.left):
                 if other_r == r:
                     continue
+                their_result = other_r.apply_match(subst)
+                if their_result != r.right:
+                    continue
+
                 print("Removing redundant rule", str(r))
                 self.delete(idx)
                 self.trim_redundant_rules()

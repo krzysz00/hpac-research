@@ -15,21 +15,13 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 """Unification of two terms and associated functionality"""
+from .utils import substitute
+
 import matchpy
 from matchpy import (Expression, get_variables, get_head, rename_variables,
                      Substitution, Wildcard)
-from matchpy import substitute as _substitute
 from typing import Optional, Iterator, Tuple, Deque, Dict  # noqa: F401
 from collections import deque
-
-
-def substitute(term: Expression, substitution: Substitution) -> Expression:
-    """Wrapper around :fn:`matchpy.substitute` that does a typecheck"""
-    ret = _substitute(term, substitution)
-    if not isinstance(ret, Expression):
-        raise(ValueError("Unexpected list of expressions", ret, "from",
-                         substitution, "on", term))
-    return ret
 
 
 def unique_variables_map(expr: Expression,
