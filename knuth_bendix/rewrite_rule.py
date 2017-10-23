@@ -21,7 +21,6 @@ and other elbow grease to make everything behave"""
 from .utils import substitute
 
 import matchpy
-import warnings
 
 from matchpy import Expression, get_variables, ManyToOneMatcher
 from typing import (Iterable, Optional, Iterator, Tuple, List,  # noqa: F401
@@ -170,40 +169,3 @@ class RewriteRuleList(Iterable[RewriteRule]):
                 self.trim_redundant_rules()
                 return True
         return False
-
-
-def apply_once(expr: Expression, rule: RewriteRule) -> Expression:
-    """Apply :arg:`rule` to :arg:`rule` once if possible.
-
-    :param expr: Expression to replace in.
-    :param rule: Rule to maybe apply to the expression
-    :returns: Expression with rule applied once, if possible"""
-    warnings.warn("Bare apply_once is deprecated")
-    ruleset = RewriteRuleList(rule)
-    for _, e in ruleset.apply_each_once(expr):
-        return e
-    else:
-        return expr
-
-
-def apply_all(expr: Expression, rules: Iterable[RewriteRule],
-              max_count: Optional[int]=None) -> Expression:
-    warnings.warn("Bare apply_all is deprecated")
-    ruleset = RewriteRuleList(*rules)
-    return ruleset.apply_all(expr, max_count=max_count)
-
-
-def apply_all_once(expr: Expression,
-                   rules: Iterable[RewriteRule]) ->\
-                   Iterator[Tuple[Expression, RewriteRule]]:
-    """Attempt to apply each of the :ref:`rules` to :ref:`expr`.
-
-    :param expr: Expression to pattern match on.
-    :param rules: Rules to try and apply.
-    :returns: A generator of (new_expression, rule) pairs.
-    If the rewrite rule didn't do anything, the expression is not returned"""
-    warnings.warn("This function is deprecated and inefficient af")
-    for rule in rules:
-        new_expr = apply_once(expr, rule)
-        if expr != new_expr:
-            yield ((new_expr, rule))

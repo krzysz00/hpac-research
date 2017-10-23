@@ -15,8 +15,7 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 import pytest
-from knuth_bendix.rewrite_rule import (RewriteRule, apply_all, apply_once,
-                                       apply_all_once)
+from knuth_bendix.rewrite_rule import (RewriteRule, RewriteRuleList)
 from matchpy import Operation, make_dot_variable, Symbol, Arity
 
 
@@ -28,15 +27,18 @@ def inv_pattern():
     x = make_dot_variable('x')
     lhs = inv(x)
     rhs = x
-    return {'rule': RewriteRule(lhs, rhs),
+    rule = RewriteRule(lhs, rhs)
+    rules = RewriteRuleList(rule)
+    return {'rule': rule,
             'x': x,
-            'inv': inv}
+            'inv': inv,
+            'rules': rules}
 
 
 def test_subst(inv_pattern):
     const = Symbol('a')
     lhs = inv_pattern['inv'](const)
-    ret = apply_all(lhs, [inv_pattern['rule']])
+    ret = inv_pattern['rules'].apply_all(lhs)
     assert ret == const
 
 
@@ -49,8 +51,10 @@ def test_apply_once(inv_pattern):
     const = Symbol('b')
     inv = inv_pattern['inv']
     expr = inv(inv(const))
-    ret1 = apply_once(expr, inv_pattern['rule'])
-    ret2 = apply_all(expr, [inv_pattern['rule']], max_count=1)
+    rules = inv_pattern['rules']
+    match_r, ret1 = next(rules.apply_each_once(expr))
+    assert match_r == inv_pattern['rule']
+    ret2 = rules.apply_all(expr, max_count=1)
     assert ret1 == ret2
     assert ret1 == inv(const)
 
@@ -59,17 +63,21 @@ def test_apply_all(inv_pattern):
     const = Symbol('b')
     inv = inv_pattern['inv']
     expr = inv(inv(const))
-    ret = apply_all(expr, [inv_pattern['rule']])
+    ret = inv_pattern['rules'].apply_all(expr)
     assert ret == const
 
 
 def test_apply_all_many_rules(inv_pattern):
-    inv_rule = inv_pattern['rule']
+    rules = inv_pattern['rules']
     inv = inv_pattern['inv']
+    inv_rule = inv_pattern['rule']
+
     g = Operation.new('g', Arity.binary)
     y = make_dot_variable('y')
     z = make_dot_variable('z')
     g_rule = RewriteRule(g(y, z), y)
+
+    rules.append(g_rule)
 
     a = Symbol('a')
     b = Symbol('b')
@@ -77,12 +85,15 @@ def test_apply_all_many_rules(inv_pattern):
     d = Symbol('d')
     expr = g(inv(g(g(inv(a), b), c)), d)
 
-    ret = apply_all(expr, [inv_rule, g_rule])
+    ret = rules.apply_all(expr)
     assert ret == a
 
-    assert (list(apply_all_once(expr, [inv_rule, g_rule]))
-            == [(g(g(g(inv(a), b), c), d), inv_rule),
-                (inv(g(g(inv(a), b), c)), g_rule)])
+    assert (set(rules.apply_each_once(expr, only=[inv_rule, g_rule]))
+            == {(inv_rule, g(g(g(inv(a), b), c), d)),
+                (inv_rule, g(inv(g(g(a, b), c)), d)),
+                (g_rule, inv(g(g(inv(a), b), c))),
+                (g_rule, g(inv(g(inv(a), b)), d)),
+                (g_rule, g(inv(g(inv(a), c)), d))})
 
 
 def test_new_variable_failure():

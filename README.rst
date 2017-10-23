@@ -2,6 +2,11 @@
 Knuth-Bendix Algorithm
 =======================
 
+This is an implementation of the Knuth-Bendix algorithm within `matchpy`.
+The main code is in the `rewrite_system` module.
+
+Installation
+===========
 `pip install -r requirements-dev.txt` to get environment working.
 
 `paver develop` to install for hacking purposes, `paver install` otherwise
