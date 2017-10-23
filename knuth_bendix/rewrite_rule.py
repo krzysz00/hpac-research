@@ -164,9 +164,6 @@ class RewriteRuleList(Iterable[RewriteRule]):
             for other_r, subst in self.matcher.match(r.left):
                 if other_r == r:
                     continue
-                their_result = other_r.apply_match(subst)
-                if their_result != r.right:
-                    continue
 
                 print("Removing redundant rule", str(r))
                 self.delete(idx)
