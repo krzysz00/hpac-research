@@ -22,7 +22,8 @@ from .utils import substitute
 
 import matchpy
 
-from matchpy import Expression, get_variables, ManyToOneMatcher
+from matchpy import (Expression, get_variables, ManyToOneMatcher,
+                     rename_variables)
 from typing import (Iterable, Optional, Iterator, Tuple, List,  # noqa: F401
                     Container, Dict)
 
@@ -42,9 +43,10 @@ class RewriteRule(object):
         """
         if not get_variables(right) <= get_variables(left):
             raise(ValueError("Variables on right of rule with no equivalent on the left")) # NOQA
-        self.left = left
-        self.right = right
-        self.lhs = matchpy.Pattern(left)
+        substitution = ManyToOneMatcher._collect_variable_renaming(left)
+        self.left = rename_variables(left, substitution)
+        self.right = rename_variables(right, substitution)
+        self.lhs = matchpy.Pattern(self.left)
 
     def apply_match(self, subst: matchpy.Substitution) -> Expression:
         """Apply the given substitution to the right hand side of the rule.

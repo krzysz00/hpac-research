@@ -134,9 +134,9 @@ class RewriteSystem(object):
         for idx, r in enumerate(self.rules):
             new_right = self.normalize(r.right)
             if not equal_mod_renaming(r.right, new_right):
-                self.rules.replace(idx, RewriteRule(r.left, new_right))
-                print("Normalized right:", str(r.left), "->",
-                      str(r.right), "->", new_right)
+                new_rule = RewriteRule(r.left, new_right)
+                self.rules.replace(idx, new_rule)
+                print("Normalized right:", new_rule)
                 return True
 
         # Normalize LHSs as much as possible
@@ -186,8 +186,8 @@ class RewriteSystem(object):
             t = self.normalize(t)
             if not equal_mod_renaming(s, t):
                 s_prime, t_prime = self.orient(s, t, order)
-                print("New rule:", str(s_prime), "->", str(t_prime))
                 new_rule = RewriteRule(s_prime, t_prime)
+                print("New rule:", str(new_rule))
                 self.rules.append(new_rule)
                 self._add_critical_pairs_with(new_rule)
                 while self._canonicalize_system_step(order):

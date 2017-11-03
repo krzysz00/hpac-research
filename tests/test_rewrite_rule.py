@@ -44,7 +44,7 @@ def test_subst(inv_pattern):
 
 def test_print(inv_pattern, capsys):
     print(inv_pattern['rule'])
-    assert capsys.readouterr() == ("inv(x_) -> x_\n", "")
+    assert capsys.readouterr() == ("inv(i1_) -> i1_\n", "")
 
 
 def test_apply_once(inv_pattern):

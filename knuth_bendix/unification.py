@@ -35,9 +35,9 @@ def unique_variables_map(expr: Expression,
     ret = {}  # type: Dict[str, str]
     bad_vars = get_variables(expr) & get_variables(to_avoid)
     for name in bad_vars:
-        ret[name] = '_' + name
+        ret[name] = name + "_u"
         while ret[name] in bad_vars:
-            ret[name] = '_' + ret[name]
+            ret[name] = ret[name] + "_u"
     return ret
 
 

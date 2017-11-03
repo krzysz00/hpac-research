@@ -6,7 +6,7 @@ from .. import functions
 from ..expressions.expressions import Expression, Operation, Pattern, Symbol
 from ..expressions.substitution import Substitution
 from multiset import Multiset
-from typing import Any, Dict, Iterable, Iterator, Optional, Sequence, Tuple, Type, Union, Generic, TypeVar
+from typing import Any, Dict, Iterable, Iterator, Optional, Sequence, Tuple, Type, Union, Generic, TypeVar, List
 from graphviz import Digraph, Graph
 
 LabelType = Union[Expression, Type[Operation]]
@@ -21,6 +21,9 @@ class ManyToOneMatcher(Generic[_T]):
     def add(self, pattern: Pattern, label: _T=...) -> None: ...
     def match(self, subject: Expression) -> Iterator[Tuple[_T, Substitution]]: ...
     def is_match(self, subject: Expression) -> bool: ...
+    @classmethod
+    def _collect_variable_renaming(cls, expression: Expression, position: Optional[List[int]]=...,
+                                   variables: Optional[Dict[str, str]]=...) -> Dict[str, str]: ...
     def as_graph(self) -> Digraph: ...
 
 class ManyToOneReplacer:
