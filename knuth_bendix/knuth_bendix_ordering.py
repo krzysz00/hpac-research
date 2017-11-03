@@ -15,44 +15,12 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 """A class implementing the Knuth-Bendix ordering"""
-from matchpy import (Expression, get_head, Operation,
-                     Symbol)
-from typing import (Optional, Mapping, Set, Tuple, TypeVar, Union, Type,
-                    cast)
 from .unification import equal_mod_renaming
+from .utils import (transitive_closure, PartialOrder,
+                    Operator, to_operator)
 
-
-_T = TypeVar('_T')
-PartialOrder = Set[Tuple[_T, _T]]
-
-
-def _transitive_closure(order: PartialOrder[_T]) -> PartialOrder[_T]:
-    """Take a partial ordering and return its transitive closure
-
-    :param ordering: The ordering to close
-    :returns: Transitive closure of :ref:`ordering`"""
-    while True:
-        new_relations = set((x, w) for x, y in order
-                            for q, w in order if q == y)
-        new_order = order | new_relations
-        if order == new_order:
-            return order
-        order = new_order
-
-
-Operator = Union[Symbol, Type[Operation]]
-"""Either a function or a constant symbol"""
-
-
-def to_operator(term: Expression) -> Optional[Operator]:
-    """Perform any necessary extraction and type casting to make
-    :ref:`term' into a :ref:`Operator`"""
-    if isinstance(term, Operation):
-        return cast(Type[Operation], get_head(term))
-    elif isinstance(term, Symbol):
-        return term
-    else:
-        return None
+from matchpy import (Expression,  Operation, Symbol)
+from typing import (Mapping, Type, cast)
 
 
 # This ordering is from
@@ -77,7 +45,7 @@ class KnuthBendixOrdering(object):
         :param var_weight: Weight for variables,
         :param op_gt: Partial order (will be transitively closed over)
         on the operators. Send in >"""
-        self.op_gt = _transitive_closure(op_gt)
+        self.op_gt = transitive_closure(op_gt)
         self.arities = {}  # type: Mapping[Operator, int]
         for op in weights:
             if (op, op) in self.op_gt:

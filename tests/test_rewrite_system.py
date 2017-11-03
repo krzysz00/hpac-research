@@ -15,24 +15,30 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 from knuth_bendix.knuth_bendix_ordering import KnuthBendixOrdering
+from knuth_bendix.lex_path_ordering import LexPathOrdering
 from knuth_bendix.rewrite_system import RewriteSystem
 from knuth_bendix.rewrite_rule import RewriteRule
 from knuth_bendix.unification import equal_mod_renaming
 
 from matchpy import (Operation, Arity, make_dot_variable, Symbol)
+import pytest
 
 x, y, z = (make_dot_variable(t) for t in ['x', 'y', 'z'])
 times = Operation.new('*', Arity.binary, 'times', infix=True)
 i = Operation.new('i', Arity.unary)
 e = Symbol('e')
-order = KnuthBendixOrdering({times: 0, i: 0, e: 1}, 1,
-                            {(i, times), (times, e)})
 
 
-def test_group_theory_completion():
+@pytest.mark.parametrize("order", [
+    KnuthBendixOrdering({times: 0, i: 0, e: 1}, 1,
+                        {(i, times), (times, e)}),
+    LexPathOrdering({(i, times), (times, e)})
+])
+def test_group_theory_completion(order):
     equations = [(times(times(x, y), z), times(x, times(y, z))),
                  (times(e, x), x),
                  (times(i(x), x), e)]
+
     expected_system = [
         RewriteRule(times(x, e), x),
         RewriteRule(times(e, x), x),

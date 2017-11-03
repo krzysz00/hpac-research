@@ -25,6 +25,7 @@ import sys
 
 from knuth_bendix import metadata
 from knuth_bendix.knuth_bendix_ordering import KnuthBendixOrdering
+# from knuth_bendix.lex_path_ordering import LexPathOrdering
 from knuth_bendix.rewrite_system import RewriteSystem
 from matchpy import (Operation, Arity, make_dot_variable, Symbol)
 
@@ -66,8 +67,10 @@ URL: <{url}>
     times = Operation.new('*', Arity.binary, 'times', infix=True)
     i = Operation.new('i', Arity.unary)
     e = Symbol('e')
+
     order = KnuthBendixOrdering({times: 0, i: 0, e: 1}, 1,
                                 {(i, times), (times, e)})
+
     equations = [(times(times(x, y), z), times(x, times(y, z))),
                  (times(e, x), x),
                  (times(i(x), x), e)]
