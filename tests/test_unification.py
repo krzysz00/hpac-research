@@ -71,21 +71,21 @@ def test_maybe_add_substitution(subs, var, rule, expected):
 
 
 @pytest.mark.parametrize("left,right,expected", [
-    (x, y, {'x': y}),
-    (g(x), y, {'y': g(x)}),
-    (z, g(a), {'z': g(a)}),
-    (g(x), g(a), {'x': a}),
-    (f(x, b), f(a, y), {'x': a, 'y': b}),
-    (f(x, y), g(x), None),
-    (plus(x, y, z), plus(x, y), None),
-    (f(f(x, y), z), f(g(x), z), None),
-    (f(x, y), f(y, x), {'x': y}),
-    (f(g(x), x), f(g(a), y), {'x': a, 'y': a}),
+    (x, y, [{'x': y}]),
+    (g(x), y, [{'y': g(x)}]),
+    (z, g(a), [{'z': g(a)}]),
+    (g(x), g(a), [{'x': a}]),
+    (f(x, b), f(a, y), [{'x': a, 'y': b}]),
+    (f(x, y), g(x), []),
+    (plus(x, y, z), plus(x, y), []),
+    (f(f(x, y), z), f(g(x), z), []),
+    (f(x, y), f(y, x), [{'x': y}]),
+    (f(g(x), x), f(g(a), y), [{'x': a, 'y': a}]),
 ])
 def test_unify_expressions(left, right, expected):
     assert unify_expressions(left, right) == expected
-    sub = unify_expressions(left, right)
-    if sub is not None:
+    subs = unify_expressions(left, right)
+    for sub in subs:
         assert substitute(left, sub) == substitute(right, sub)
 
 

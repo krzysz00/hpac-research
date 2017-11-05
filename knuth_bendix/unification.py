@@ -20,7 +20,7 @@ from .utils import substitute
 import matchpy
 from matchpy import (Expression, get_variables, get_head, rename_variables,
                      Substitution, Wildcard)
-from typing import Optional, Iterator, Tuple, Deque, Dict  # noqa: F401
+from typing import Optional, Iterator, Tuple, Deque, Dict, List  # noqa: F401
 from collections import deque
 
 
@@ -77,7 +77,7 @@ def maybe_add_substitution(sub: Substitution, var: str,
 
 
 def unify_expressions(left: Expression,
-                      right: Expression) -> Optional[Substitution]:
+                      right: Expression) -> List[Substitution]:
     """Return a substitution alpha such that
     :ref:`left` * alpha == :ref:`right` * alpha,
     or None if none such exists.
@@ -88,12 +88,23 @@ def unify_expressions(left: Expression,
     :param left: An expression to unify.
     :param right: An expression to unify
     :returns: The unifying substitution, or None"""
-    ret = Substitution()
-    to_operate = deque([(left, right)])
-    while to_operate:
+    main_ret = []
+
+    root_ret = Substitution()
+    root_to_operate = deque([(left, right)])
+    operations = deque([(root_ret, root_to_operate)])
+    while operations:
+        ret, to_operate = operations.popleft()
+
+        if not to_operate:  # Successful unification
+            main_ret.append(ret)
+            continue
+
         t1, t2 = to_operate.popleft()
         if t1 == t2:
+            operations.append((ret, to_operate))
             continue
+
         any_change = False
         if isinstance(t1, Wildcard):
             new_subs = maybe_add_substitution(ret, t1.variable_name, t2)
@@ -101,14 +112,14 @@ def unify_expressions(left: Expression,
                 ret = new_subs
                 any_change = True
             else:
-                return None
+                continue  # Here we drop the branch
         elif isinstance(t2, Wildcard):
             new_subs = maybe_add_substitution(ret, t2.variable_name, t1)
             if new_subs is not None:
                 ret = new_subs
                 any_change = True
             else:
-                return None
+                continue
         elif (get_head(t1) == get_head(t2)
               and isinstance(t1, matchpy.Operation)
               and isinstance(t2, matchpy.Operation)
@@ -117,7 +128,7 @@ def unify_expressions(left: Expression,
             to_operate.extendleft(reversed(list(zip(t1.operands,
                                                     t2.operands))))
         else:
-            return None
+            continue
 
         if any_change:
             new_queue = deque()  # type: Deque[Tuple[Expression, Expression]]
@@ -127,7 +138,10 @@ def unify_expressions(left: Expression,
                 new_b = substitute(b, ret)
                 new_queue.append((new_a, new_b))
             to_operate = new_queue
-    return ret
+
+        operations.append((ret, to_operate))
+
+    return main_ret
 
 
 def find_overlaps(term: Expression, within: Expression) ->\
@@ -141,8 +155,8 @@ def find_overlaps(term: Expression, within: Expression) ->\
     term = uniqify_variables(term, within)
     for subterm, _ in within.preorder_iter():
         if not isinstance(subterm, Wildcard):
-            sigma = unify_expressions(term, subterm)
-            if sigma is not None:
+            sigmas = unify_expressions(term, subterm)
+            for sigma in sigmas:
                 # Don't bother with trivial substitutions
                 # if not all(isinstance(t, Wildcard)
                 #           or equal_mod_renaming(t, term)
@@ -159,11 +173,12 @@ def equal_mod_renaming(t1: Expression, t2: Expression) -> bool:
     """Determines if :ref:`t1` and :ref:`t2 are equal up to variable renaming.
 
     :returns: Indication of the two expressions are syntactically equal"""
-    if len(get_variables(t1)) != len(get_variables(t2)):
-        return False
-    sub = unify_expressions(t1, t2)
-    return sub is not None and all((isinstance(t, Wildcard)
-                                    for t in sub.values()))
+    t1_sub = matchpy.ManyToOneMatcher._collect_variable_renaming(t1)
+    t2_sub = matchpy.ManyToOneMatcher._collect_variable_renaming(t2)
+
+    t1_canonical = matchpy.rename_variables(t1, t1_sub)
+    t2_canonical = matchpy.rename_variables(t2, t2_sub)
+    return t1_canonical == t2_canonical
 
 
 def proper_contains(term: Expression,
