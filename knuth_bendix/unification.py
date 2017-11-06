@@ -19,9 +19,16 @@ from .utils import substitute
 
 import matchpy
 from matchpy import (Expression, get_variables, get_head, rename_variables,
-                     Substitution, Wildcard)
-from typing import Optional, Iterator, Tuple, Deque, Dict, List  # noqa: F401
-from collections import deque
+                     Substitution, Wildcard, Operation)
+
+from typing import (Optional, Iterator, Tuple, Deque, Dict, List,  # noqa: F401
+                    NamedTuple, TypeVar, Iterable, Sequence, DefaultDict, Any)
+
+from copy import copy
+from collections import deque, defaultdict
+from multiset import Multiset
+import itertools
+import numpy as np  # type: ignore
 
 
 def unique_variables_map(expr: Expression,
@@ -76,6 +83,285 @@ def maybe_add_substitution(sub: Substitution, var: str,
     return Substitution(sub, **new_substitutions)
 
 
+def to_bitfield(x: int, n_bits: int) -> List[bool]:
+    """Treating :param:`x` as an :param:`n_bits` long number,
+    give a list of the bits in :param:`x`, represented as booleans.
+
+    Most significant bit of :param:`x` appears first on the list"""
+    return [bool((x >> i) & 1) for i in range(n_bits - 1, -1, -1)]
+
+
+def from_bitfield(lst: Iterable[bool]) -> int:
+    """Convert an iterable of booleans to a binary number."""
+    ret = 0
+    for i in lst:
+        ret = ret << 1
+        if i:
+            ret += 1
+    return ret
+
+
+def all_boolean_matrices(m, n):
+    # type: (int, int) -> Iterator[np.ndarray[bool]]
+    """Return all m x n boolean matrices"""
+    yield from (np.array(list(map(lambda r: to_bitfield(r, n), rows)),
+                         dtype=bool)
+                for rows in itertools.product(range(0, 2 ** n), repeat=m))
+
+
+class AcOperands(NamedTuple):
+    """Convenience for sorting out the operands to AC functions.
+
+    We'll need this foralgorithm reasons"""
+    consts: List[Expression] = []  # noqa: E999, E701
+    terms: List[Expression] = []  # noqa: E701
+    vars: List[Expression] = []  # noqa: E701
+
+
+def to_ac_operands(ops):
+    # type: (Multiset[Expression]) -> AcOperands
+    """Sort all the (deduplicated) operands of an AC function by type.
+
+    Because of how multiset iteration works,
+    this'll keep identical things next to each other"""
+    ret = AcOperands()
+    for i in ops:
+        if isinstance(i, matchpy.Symbol):
+            ret.consts.append(i)
+        elif isinstance(i, Wildcard):
+            ret.vars.append(i)
+        else:
+            ret.terms.append(i)
+    return ret
+
+
+def some_pairs_sorted(lst: Sequence[int],
+                      idxs: Sequence[int]) -> bool:
+    """Determine if there is an i in :param:`idxs` such that
+    `lst[i]` <= `lst[i + 1]`.
+
+    For the AC unification algorithm, this implies we have a violation of
+    the ordering constraint."""
+    return any(lst[i] <= lst[i + 1] for i in idxs)
+
+
+def ints_walking_range(min: int, max: int,
+                       n: int) -> Iterator[Tuple[int, ...]]:
+    """All the n-tuples of integers with elements in [min, max)"""
+    yield from itertools.product(
+        range(min, max),
+        repeat=n)
+
+
+_T = TypeVar('_T')
+def safe_index(lst: List[_T], item: _T) -> Optional[int]:  # noqa: E302
+    """Index of a given `item` in `lst`, or `None` if it's not found"""
+    try:
+        return lst.index(item)
+    except ValueError:
+        return None
+
+
+def compare_equal_variable_vectors(idx,
+                                   my_vec, their_vec,
+                                   idxs_from_constants,
+                                   idxs_from_terms):
+    # type: (int, np.ndarray[bool], np.ndarray[bool], Sequence[int], Sequence[int]) -> bool # noqa: E501
+    """my and theirs are slices from the variable matrix we want to compare.
+    The idxs have values that are indices of things that run in the direction
+    of my and theirs.
+
+    Returns True if my < theirs as a binary number, False otherwise"""
+    var_start = len(idxs_from_constants) + len(idxs_from_terms)
+    term_start = len(idxs_from_constants)
+
+    my_vec = np.pad(my_vec, (var_start, 0),
+                    'constant', constant_values=False)
+    their_vec = np.pad(their_vec, (var_start, 0),
+                       'constant', constant_values=False)
+    search = idx + var_start
+    for field, val in enumerate(idxs_from_constants):
+        if val == search:
+            my_vec[field] = True
+        if val == search + 1:
+            their_vec[field] = True
+    for field, val in enumerate(idxs_from_terms):
+        if val == search:
+            my_vec[field + term_start] = True
+        if val == search + 1:
+            their_vec[field + term_start] = True
+        if from_bitfield(my_vec) >= from_bitfield(their_vec):
+            return False
+    return True
+
+
+def ac_operand_lists(t1: Operation, t2: Operation)\
+                    -> List[List[Tuple[Expression, Expression]]]:
+    """Find all the sets of operand unification problems
+    we can get from t1 and t2"""
+    # Remove common operations
+    t1_op_set = Multiset(t1.operands)
+    t2_op_set = Multiset(t2.operands)
+    common_ops = t1_op_set & t2_op_set
+    t1_op_set -= common_ops
+    t2_op_set -= common_ops
+
+    t1_duplicate_vars = any(isinstance(e, Wildcard) and n > 1
+                            for e, n in t1_op_set.items())
+    t2_duplicate_vars = any(isinstance(e, Wildcard) and n > 1
+                            for e, n in t2_op_set.items())
+    if t1_duplicate_vars and t2_duplicate_vars:
+        raise(NotImplementedError("Possible nontermination on this algo, dispatch slowward"))  # noqa
+    elif t1_duplicate_vars or t2_duplicate_vars:
+        print("Redundant solutions really gosh darn likely")
+
+    ret = []
+
+    op_function = get_head(t1)
+
+    t1_ops = to_ac_operands(t1_op_set)
+    t2_ops = to_ac_operands(t2_op_set)
+
+    all_t1_ops = t1_ops.consts + t1_ops.terms + t1_ops.vars
+    all_t2_ops = t2_ops.consts + t2_ops.terms + t2_ops.vars
+
+    t1_n_consts = len(t1_ops.consts)
+    t2_n_consts = len(t2_ops.consts)
+    t1_n_terms = len(t1_ops.terms)
+    t2_n_terms = len(t2_ops.terms)
+    t1_n_vars = len(t1_ops.vars)
+    t2_n_vars = len(t2_ops.vars)
+    t1_n_ops = len(all_t1_ops)
+    t2_n_ops = len(all_t2_ops)
+
+    t1_var_start = t1_n_ops - t1_n_vars
+    t2_var_start = t2_n_ops - t2_n_vars
+
+    t1_equal_consts = [idx for idx in range(0, t1_n_consts - 1)
+                       if t1_ops.consts[idx] == t1_ops.consts[idx + 1]]
+    t2_equal_consts = [idx for idx in range(0, t2_n_consts - 1)
+                       if t2_ops.consts[idx] == t2_ops.consts[idx + 1]]
+    t1_equal_terms = [idx for idx in range(0, t1_n_terms - 1)
+                      if t1_ops.terms[idx] == t1_ops.terms[idx + 1]]
+    t2_equal_terms = [idx for idx in range(0, t2_n_terms - 1)
+                      if t2_ops.terms[idx] == t2_ops.terms[idx + 1]]
+    t1_equal_vars = [idx for idx in range(0, t1_n_vars - 1)
+                     if t1_ops.vars[idx] == t1_ops.vars[idx + 1]]
+    t2_equal_vars = [idx for idx in range(0, t2_n_vars - 1)
+                     if t2_ops.vars[idx] == t2_ops.vars[idx + 1]]
+
+    for const_rows_true_idx in ints_walking_range(t2_var_start,
+                                                  t2_n_ops,
+                                                  t1_n_consts):
+        # Drop clear violations of the repeat property here
+        if some_pairs_sorted(const_rows_true_idx, t1_equal_consts):
+            continue
+
+        for const_cols_true_idx in ints_walking_range(t1_var_start,
+                                                      t1_n_ops,
+                                                      t2_n_consts):
+            if some_pairs_sorted(const_cols_true_idx, t2_equal_consts):
+                continue
+
+            for term_rows_true_idx in ints_walking_range(t2_n_consts,
+                                                         t2_n_ops,
+                                                         t1_n_terms):
+                if some_pairs_sorted(term_rows_true_idx, t1_equal_terms):
+                    continue
+
+                for term_cols_true_idx in ints_walking_range(t1_n_consts,
+                                                             t1_n_ops,
+                                                             t2_n_terms):
+                    if some_pairs_sorted(term_cols_true_idx, t2_equal_terms):
+                        continue
+
+                    # Term mismatch
+                    if any(not row_nr < t1_var_start
+                           and (term_rows_true_idx[row_nr - t1_n_consts]
+                                != rel_col_nr + t2_n_consts)
+                           for rel_col_nr, row_nr
+                           in enumerate(term_cols_true_idx)):
+                        continue
+
+                    if any(not col_nr < t2_var_start
+                           and (term_rows_true_idx[col_nr - t2_n_consts]
+                                != rel_row_nr + t1_n_consts)
+                           for rel_row_nr, col_nr
+                           in enumerate(term_rows_true_idx)):
+                        continue
+
+                    set_cols = (set(const_rows_true_idx)
+                                | set(term_rows_true_idx))
+                    set_rows = (set(const_cols_true_idx)
+                                | set(term_cols_true_idx))
+
+                    for var_mat in all_boolean_matrices(t1_n_vars, t2_n_vars):
+                        # Filter out failures of unification
+                        if any(row_sum == 0
+                               and raw_idx[0] + t1_var_start not in set_rows
+                               for raw_idx, row_sum
+                               in np.ndenumerate(np.sum(var_mat, axis=1))):
+                            continue
+
+                        if any(col_sum == 0
+                               and raw_idx[0] + t2_var_start not in set_cols
+                               for raw_idx, col_sum
+                               in np.ndenumerate(np.sum(var_mat, axis=0))):
+                            continue
+
+                        if any(compare_equal_variable_vectors(
+                                i, var_mat[i, :], var_mat[i + 1, :],
+                                const_cols_true_idx, term_cols_true_idx)
+                               for i in t1_equal_vars):
+                            continue
+                        if any(compare_equal_variable_vectors(
+                                i, var_mat[:, i], var_mat[:, i + 1],
+                                const_rows_true_idx, term_rows_true_idx)
+                               for i in t2_equal_vars):
+                            continue
+
+                        operand_tuples = []
+                        t1_var_unifiers = defaultdict(list)  # type: DefaultDict[Expression, List[Expression]] # noqa: E501
+                        t2_var_unifiers = defaultdict(list)  # type: DefaultDict[Expression, List[Expression]] # noqa: E501
+                        for const, var_idx in zip(t1_ops.consts,
+                                                  const_rows_true_idx):
+                            var = all_t2_ops[var_idx]
+                            t2_var_unifiers[var].append(const)
+                        for const, var_idx in zip(t2_ops.consts,
+                                                  const_cols_true_idx):
+                            var = all_t1_ops[var_idx]
+                            t1_var_unifiers[var].append(const)
+                        for term, var_idx in zip(t1_ops.terms,
+                                                 term_rows_true_idx):
+                            expr = all_t2_ops[var_idx]
+                            if isinstance(expr, Wildcard):
+                                t2_var_unifiers[expr].append(term)
+                            else:
+                                operand_tuples.append((term, expr))
+                        for term, var_idx in zip(t2_ops.terms,
+                                                 term_cols_true_idx):
+                            expr = all_t1_ops[var_idx]
+                            if isinstance(expr, Wildcard):
+                                t1_var_unifiers[expr].append(term)
+                            # Else case handled above
+
+                        for idxs in np.nonzero(var_mat):
+                            row = t1_ops.vars[idxs[0]]
+                            col = t2_ops.vars[idxs[1]]
+                            t1_var_unifiers[row].append(col)
+                            t2_var_unifiers[col].append(row)
+                        for d in [t1_var_unifiers, t2_var_unifiers]:
+                            for var, ops in d.items():
+                                if len(ops) == 1:
+                                    operand_tuples.append((var, ops[0]))
+                                else:
+                                    operand_tuples.append((var,
+                                                           op_function(*ops)))
+
+                        ret.append(operand_tuples)
+    return ret
+
+
 def unify_expressions(left: Expression,
                       right: Expression) -> List[Substitution]:
     """Return a substitution alpha such that
@@ -94,6 +380,7 @@ def unify_expressions(left: Expression,
     root_to_operate = deque([(left, right)])
     operations = [(root_ret, root_to_operate)]
     while operations:
+        preserve_this = True
         ret, to_operate = operations.pop()
 
         if not to_operate:  # Successful unification
@@ -121,13 +408,19 @@ def unify_expressions(left: Expression,
             else:
                 continue
         elif (get_head(t1) == get_head(t2)
-              and isinstance(t1, matchpy.Operation)
-              and isinstance(t2, matchpy.Operation)):
+              and isinstance(t1, Operation)
+              and isinstance(t2, Operation)):
             # Unify within functions
             if t1.associative and t1.commutative:
-                raise(NotImplementedError("TODO"))
+                potential_unifiers = ac_operand_lists(t1, t2)
+                preserve_this = False
+                for i in potential_unifiers:
+                    new_ret = copy(ret)
+                    new_to_operate = copy(to_operate)
+                    new_to_operate.extend(i)
+                    operations.append((new_ret, new_to_operate))
             elif t1.associative or t1.commutative:
-                raise(NotImplementedError("Straight associative or commutative ain't happening"))
+                raise(NotImplementedError("Straight associative or commutative ain't happening"))  # noqa
             elif len(t1.operands) == len(t2.operands):
                 to_operate.extend((zip(t1.operands, t2.operands)))
             else:
@@ -144,7 +437,8 @@ def unify_expressions(left: Expression,
                 new_queue.append((new_a, new_b))
             to_operate = new_queue
 
-        operations.append((ret, to_operate))
+        if preserve_this:
+            operations.append((ret, to_operate))
 
     return main_ret
 
