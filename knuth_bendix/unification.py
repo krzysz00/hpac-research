@@ -92,9 +92,9 @@ def unify_expressions(left: Expression,
 
     root_ret = Substitution()
     root_to_operate = deque([(left, right)])
-    operations = deque([(root_ret, root_to_operate)])
+    operations = [(root_ret, root_to_operate)]
     while operations:
-        ret, to_operate = operations.popleft()
+        ret, to_operate = operations.pop()
 
         if not to_operate:  # Successful unification
             main_ret.append(ret)
@@ -122,11 +122,16 @@ def unify_expressions(left: Expression,
                 continue
         elif (get_head(t1) == get_head(t2)
               and isinstance(t1, matchpy.Operation)
-              and isinstance(t2, matchpy.Operation)
-              and len(t1.operands) == len(t2.operands)):
+              and isinstance(t2, matchpy.Operation)):
             # Unify within functions
-            to_operate.extendleft(reversed(list(zip(t1.operands,
-                                                    t2.operands))))
+            if t1.associative and t1.commutative:
+                raise(NotImplementedError("TODO"))
+            elif t1.associative or t1.commutative:
+                raise(NotImplementedError("Straight associative or commutative ain't happening"))
+            elif len(t1.operands) == len(t2.operands):
+                to_operate.extend((zip(t1.operands, t2.operands)))
+            else:
+                continue
         else:
             continue
 

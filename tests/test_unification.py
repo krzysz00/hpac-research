@@ -26,7 +26,7 @@ from matchpy import (Operation, Arity, make_dot_variable, Symbol,
                      get_variables, substitute)
 
 plus = Operation.new('+', Arity.polyadic, 'plus', infix=True,
-                     associative=True)
+                     associative=True, commutative=True)
 f = Operation.new('f', Arity.binary)
 g = Operation.new('g', Arity.unary)
 h = Operation.new('h', Arity.binary)
@@ -77,7 +77,7 @@ def test_maybe_add_substitution(subs, var, rule, expected):
     (g(x), g(a), [{'x': a}]),
     (f(x, b), f(a, y), [{'x': a, 'y': b}]),
     (f(x, y), g(x), []),
-    (plus(x, y, z), plus(x, y), []),
+#    (plus(x, y, z), plus(x, y), []),
     (f(f(x, y), z), f(g(x), z), []),
     (f(x, y), f(y, x), [{'x': y}]),
     (f(g(x), x), f(g(a), y), [{'x': a, 'y': a}]),
