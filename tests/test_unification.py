@@ -33,6 +33,7 @@ h = Operation.new('h', Arity.binary)
 x = make_dot_variable('x')
 y = make_dot_variable('y')
 z = make_dot_variable('z')
+w = make_dot_variable('w')
 a = Symbol('a')
 b = Symbol('b')
 
@@ -77,10 +78,22 @@ def test_maybe_add_substitution(subs, var, rule, expected):
     (g(x), g(a), [{'x': a}]),
     (f(x, b), f(a, y), [{'x': a, 'y': b}]),
     (f(x, y), g(x), []),
-#    (plus(x, y, z), plus(x, y), []),
     (f(f(x, y), z), f(g(x), z), []),
     (f(x, y), f(y, x), [{'x': y}]),
     (f(g(x), x), f(g(a), y), [{'x': a, 'y': a}]),
+    # Associtave-commutative cases
+    (plus(w, x), plus(y, z),
+     [{'w': y, 'x': z}, {'w': z, 'x': y}]),
+    (plus(a, x), plus(y, z),
+     [{'z': a, 'x': y}, {'y': a, 'x': z}]),
+    (plus(a, a, a), plus(w, a), [{'w': plus(a, a)}]),
+    (plus(a, a, a), plus(w, x),
+     [{'x': plus(a, a), 'w': a}, {'w': plus(a, a), 'x': a}]),
+    (plus(g(w), g(x)), plus(g(y), g(z)),
+     [{'w': z, 'x': y}, {'w': y, 'x': z}]),
+    (plus(g(w), g(x)), plus(y, z),
+     [{'y': g(x), 'z': g(w)}, {'y': g(w), 'z': g(x)}]),
+    (plus(g(w), g(z)), plus(a, a), []),
 ])
 def test_unify_expressions(left, right, expected):
     assert unify_expressions(left, right) == expected
