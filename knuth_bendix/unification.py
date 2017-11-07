@@ -104,8 +104,10 @@ def from_bitfield(lst: Iterable[bool]) -> int:
 def all_boolean_matrices(m, n):
     # type: (int, int) -> Iterator[np.ndarray[bool]]
     """Return all m x n boolean matrices"""
-    yield from (np.array(list(map(lambda r: to_bitfield(r, n), rows)),
-                         dtype=bool)
+    yield from (np.reshape(np.array(list(map(lambda r: to_bitfield(r, n),
+                                             rows)),
+                                    dtype=bool),
+                           (m, n))  # Avoid a crash on 0-length arrays
                 for rows in itertools.product(range(0, 2 ** n), repeat=m))
 
 
@@ -113,9 +115,9 @@ class AcOperands(NamedTuple):
     """Convenience for sorting out the operands to AC functions.
 
     We'll need this foralgorithm reasons"""
-    consts: List[Expression] = []  # noqa: E999, E701
-    terms: List[Expression] = []  # noqa: E701
-    vars: List[Expression] = []  # noqa: E701
+    consts: List[Expression]  # noqa: E999, E701
+    terms: List[Expression]  # noqa: E701
+    vars: List[Expression]  # noqa: E701
 
 
 def to_ac_operands(ops):
@@ -124,7 +126,7 @@ def to_ac_operands(ops):
 
     Because of how multiset iteration works,
     this'll keep identical things next to each other"""
-    ret = AcOperands()
+    ret = AcOperands([], [], [])
     for i in ops:
         if isinstance(i, matchpy.Symbol):
             ret.consts.append(i)
@@ -142,7 +144,7 @@ def some_pairs_sorted(lst: Sequence[int],
 
     For the AC unification algorithm, this implies we have a violation of
     the ordering constraint."""
-    return any(lst[i] <= lst[i + 1] for i in idxs)
+    return any(lst[i] < lst[i + 1] for i in idxs)
 
 
 def ints_walking_range(min: int, max: int,
@@ -276,15 +278,15 @@ def ac_operand_lists(t1: Operation, t2: Operation)\
                         continue
 
                     # Term mismatch
-                    if any(not row_nr < t1_var_start
+                    if any(row_nr < t1_var_start
                            and (term_rows_true_idx[row_nr - t1_n_consts]
                                 != rel_col_nr + t2_n_consts)
                            for rel_col_nr, row_nr
                            in enumerate(term_cols_true_idx)):
                         continue
 
-                    if any(not col_nr < t2_var_start
-                           and (term_rows_true_idx[col_nr - t2_n_consts]
+                    if any(col_nr < t2_var_start
+                           and (term_cols_true_idx[col_nr - t2_n_consts]
                                 != rel_row_nr + t1_n_consts)
                            for rel_row_nr, col_nr
                            in enumerate(term_rows_true_idx)):
@@ -345,7 +347,8 @@ def ac_operand_lists(t1: Operation, t2: Operation)\
                                 t1_var_unifiers[expr].append(term)
                             # Else case handled above
 
-                        for idxs in np.nonzero(var_mat):
+                        for idxs in np.transpose(np.nonzero(var_mat)):
+                            print(idxs)
                             row = t1_ops.vars[idxs[0]]
                             col = t2_ops.vars[idxs[1]]
                             t1_var_unifiers[row].append(col)
