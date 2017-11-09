@@ -154,20 +154,3 @@ class RewriteRuleList(Iterable[RewriteRule]):
                     if not isinstance(new_expr, Expression):
                         raise TypeError("Result of swapping part of an expression by an expression is not an expression")  # NOQA
                     yield (rule, new_expr)
-
-    def trim_redundant_rules(self) -> bool:
-        """Remove rules that are specializations of
-        or identical to rules in the set.
-
-        :returns: True if any rules were removed"""
-        for idx, r in enumerate(self.rules):
-            # This only considers whole-expression matches
-            for other_r, subst in self.matcher.match(r.left):
-                if other_r == r:
-                    continue
-
-                print("Removing redundant rule", str(r))
-                self.delete(idx)
-                self.trim_redundant_rules()
-                return True
-        return False

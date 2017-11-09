@@ -117,6 +117,23 @@ class RewriteSystem(object):
             rules.append(RewriteRule(left, right))
         return cls(rules)
 
+    def trim_redundant_rules(self) -> bool:
+        """Remove rules that are specializations of
+        or identical to rules in the set.
+
+        :returns: True if any rules were removed"""
+        for idx, r in enumerate(self.rules.rules):
+            # This only considers whole-expression matches
+            for other_r, subst in self.rules.matcher.match(r.left):
+                if other_r == r:
+                    continue
+
+                print("Removing redundant rule", str(r))
+                self.rules.delete(idx)
+                self.trim_redundant_rules()
+                return True
+        return False
+
     def _canonicalize_system_step(self, order: GtOrder[Expression]) -> bool:
         """Take a step towards making existing rules more well-behaved.
         This normalizes a non-normalized right hand side, if any,
@@ -127,7 +144,7 @@ class RewriteSystem(object):
         of the canonicalization procedure.
         :returns: True if the system was modified, False otherwise"""
         # Delete specializations and redundancies
-        if self.rules.trim_redundant_rules():
+        if self.trim_redundant_rules():
             return True
 
         # Normalize RHSs
