@@ -77,7 +77,11 @@ class RewriteSystem(object):
 
         :param rules: A list of rules to initialize the system with.
         Will be shallowly copied"""
-        self.rules = RewriteRuleList(*rules)
+        self.rules = RewriteRuleList()
+        self.to_extension = {}
+        self.from_extension = {}
+        for i in rules:
+            self.append_rule(i)
         self.critical_pairs = Heap(lambda e: subexpression_count(e[0]) +
                                    subexpression_count(e[1]))  # type: Heap[Tuple[Expression, Expression]]  # NOQA
 
@@ -117,19 +121,34 @@ class RewriteSystem(object):
             rules.append(RewriteRule(left, right))
         return cls(rules)
 
+    def append_rule(self, rule: RewriteRule) -> None:
+        """Append this rule to the list of rules,
+        preforming extensions if needed."""
+        self.rules.append(rule)
+
+    def replace_rule(self, idx: int,
+                     new_rule: RewriteRule) -> None:
+        """Replace the rule at :param:`idx` with :param:`new_rule`,
+        accounting for extensions if needed"""
+        self.rules.replace(idx, new_rule)
+
+    def delete_rule(self, idx: int) -> None:
+        """Delete a rule and (if needed) its extensions."""
+        self.rules.delete(idx)
+
     def trim_redundant_rules(self) -> bool:
         """Remove rules that are specializations of
         or identical to rules in the set.
 
         :returns: True if any rules were removed"""
-        for idx, r in enumerate(self.rules.rules):
+        for idx, r in enumerate(self.rules):
             # This only considers whole-expression matches
             for other_r, subst in self.rules.matcher.match(r.left):
                 if other_r == r:
                     continue
 
                 print("Removing redundant rule", str(r))
-                self.rules.delete(idx)
+                self.delete_rule(idx)
                 self.trim_redundant_rules()
                 return True
         return False
@@ -152,7 +171,7 @@ class RewriteSystem(object):
             new_right = self.normalize(r.right)
             if not equal_mod_renaming(r.right, new_right):
                 new_rule = RewriteRule(r.left, new_right)
-                self.rules.replace(idx, new_rule)
+                self.replace_rule(idx, new_rule)
                 print("Normalized right:", new_rule)
                 return True
 
@@ -164,13 +183,13 @@ class RewriteSystem(object):
                         and order(r.right, other_r.right))):
                     if equal_mod_renaming(new_e, r.right):
                         # We're about to introduce a = a
-                        self.rules.delete(idx)
+                        self.delete_rule(idx)
                         print("Left normalizing delete:", r, "gives", new_e)
                         return True
                     else:
                         u, t = self.orient(new_e, r.right, order)
                         new_rule = RewriteRule(u, t)
-                        self.rules.replace(idx, new_rule)
+                        self.replace_rule(idx, new_rule)
                         print("Left normalizing collapse: replace", r,
                               "with", new_rule)
                         return True
@@ -205,7 +224,7 @@ class RewriteSystem(object):
                 s_prime, t_prime = self.orient(s, t, order)
                 new_rule = RewriteRule(s_prime, t_prime)
                 print("New rule:", str(new_rule))
-                self.rules.append(new_rule)
+                self.append_rule(new_rule)
                 self._add_critical_pairs_with(new_rule)
                 while self._canonicalize_system_step(order):
                     pass

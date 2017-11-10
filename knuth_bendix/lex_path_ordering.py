@@ -69,6 +69,9 @@ class LexPathOrdering(object):
             # Whether or not t is an operator, s can't be > to it
             return False
 
+        if t_head is None:
+            return True
+
         if any(self(a, t) or a == t
                for a in operands(s)):  # Empty list is False
             return True
