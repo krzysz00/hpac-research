@@ -21,13 +21,14 @@ from .rewrite_rule import RewriteRule, RewriteRuleList
 from .unification import (find_overlaps, equal_mod_renaming,
                           proper_contains)
 
-from matchpy import Expression
+import matchpy
+from matchpy import Expression, get_head
 from itertools import chain, count
 import heapq
 from collections import defaultdict
 
 from typing import (List, Tuple, Callable, TypeVar, Iterable,  # noqa: F401
-                    Generic, DefaultDict)
+                    Generic, DefaultDict, Optional)
 
 _T = TypeVar('_T')
 
@@ -115,25 +116,83 @@ class RewriteSystem(object):
                        order: GtOrder[Expression],
                        equations: Iterable[Tuple[Expression, Expression]]) ->\
                        'RewriteSystem':  # NOQA
+        """Create a rewrite system from the given equations
+        using the given ordering to orient them"""
         rules = []
         for s, t in equations:
             left, right = cls.orient(s, t, order)
             rules.append(RewriteRule(left, right))
         return cls(rules)
 
+    @staticmethod
+    def extend_rule(rule: RewriteRule) -> Optional[RewriteRule]:
+        """Form the match-extension of the given rule, if one is necessary.
+
+        The operation is as follows:
+        If the rule is of the form f(x1, x2 ... xn) -> f(y1, y2, ... ym)
+        for f associative and commutative, the extension is
+        f(extvar, x1, x2, ... xn) -> f(extvar, y1, y2, ... ym).
+        If we have f(x1, x2, .. xn) -> t for t nos starting with f,
+        we go to f(extvar, x1, x2, ... xn) -> f(extvar, t).
+        Otherwise, there is no extension"""
+        if not isinstance(rule.left, matchpy.Operation):
+            return None
+        if not (rule.left.associative and rule.left.commutative):
+            return None
+        head_func = get_head(rule.left)
+        extend_temp = matchpy.make_dot_variable('__extend_temp')
+        new_left = head_func(extend_temp, rule.left)
+        new_right = head_func(extend_temp, rule.right)
+        return RewriteRule(new_left, new_right)
+
     def append_rule(self, rule: RewriteRule) -> None:
         """Append this rule to the list of rules,
-        preforming extensions if needed."""
+        preforming extensions if needed.
+
+        It shall be an invariant that extensions
+        come right after their primary in the ruleset."""
         self.rules.append(rule)
+        extended = self.extend_rule(rule)
+        if extended is not None:
+            self.rules.append(extended)
+            self.to_extension[rule] = extended
+            self.from_extension[extended] = rule
 
     def replace_rule(self, idx: int,
                      new_rule: RewriteRule) -> None:
         """Replace the rule at :param:`idx` with :param:`new_rule`,
         accounting for extensions if needed"""
+        old_rule = self.rules[idx]
         self.rules.replace(idx, new_rule)
+        if old_rule in self.to_extension:
+            old_extension = self.to_extension[old_rule]
+            del self.to_extension[old_rule]
+            del self.from_extension[old_extension]
+
+            new_extension = self.extend_rule(new_rule)
+            if new_extension is not None:
+                self.rules.replace(idx + 1, new_extension)
+                self.to_extension[new_rule] = new_extension
+                self.from_extension[new_extension] = new_rule
+            else:
+                self.rules.delete(idx + 1)
+        if old_rule in self.from_extension:
+            raise(NotImplementedError("Haven't implemented this case yet"))
 
     def delete_rule(self, idx: int) -> None:
         """Delete a rule and (if needed) its extensions."""
+        rule = self.rules[idx]
+        if rule in self.to_extension:
+            self.rules.delete(idx + 1)
+            extension = self.to_extension[rule]
+            del self.to_extension[rule]
+            del self.from_extension[extension]
+        if rule in self.from_extension:
+            self.rules.delete(idx - 1)
+            idx = idx - 1
+            short = self.from_extension[rule]
+            del self.from_extension[rule]
+            del self.to_extension[short]
         self.rules.delete(idx)
 
     def trim_redundant_rules(self) -> bool:
@@ -142,9 +201,16 @@ class RewriteSystem(object):
 
         :returns: True if any rules were removed"""
         for idx, r in enumerate(self.rules):
+            if r in self.from_extension:
+                continue
             # This only considers whole-expression matches
             for other_r, subst in self.rules.matcher.match(r.left):
                 if other_r == r:
+                    continue
+
+                if self.to_extension.get(r, None) == other_r:
+                    continue
+                if self.from_extension.get(r, None) == other_r:
                     continue
 
                 print("Removing redundant rule", str(r))
@@ -168,6 +234,8 @@ class RewriteSystem(object):
 
         # Normalize RHSs
         for idx, r in enumerate(self.rules):
+            if r in self.from_extension:
+                continue
             new_right = self.normalize(r.right)
             if not equal_mod_renaming(r.right, new_right):
                 new_rule = RewriteRule(r.left, new_right)
@@ -177,6 +245,8 @@ class RewriteSystem(object):
 
         # Normalize LHSs as much as possible
         for idx, r in enumerate(self.rules):
+            if r in self.from_extension:
+                continue
             for other_r, new_e in self.rules.apply_each_once(r.left):
                 if (proper_contains(other_r.left, r.left)
                     or (equal_mod_renaming(other_r.left, r.left)
@@ -226,5 +296,7 @@ class RewriteSystem(object):
                 print("New rule:", str(new_rule))
                 self.append_rule(new_rule)
                 self._add_critical_pairs_with(new_rule)
+                if new_rule in self.to_extension:
+                    self._add_critical_pairs_with(self.to_extension[new_rule])
                 while self._canonicalize_system_step(order):
                     pass
