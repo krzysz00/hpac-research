@@ -20,6 +20,7 @@ including the Knuth-Bendix completion algorithm"""
 from .rewrite_rule import RewriteRule, RewriteRuleList
 from .unification import (find_overlaps, equal_mod_renaming,
                           proper_contains)
+from .utils import substitute
 
 import matchpy
 from matchpy import Expression, get_head
@@ -124,8 +125,7 @@ class RewriteSystem(object):
             rules.append(RewriteRule(left, right))
         return cls(rules)
 
-    @staticmethod
-    def extend_rule(rule: RewriteRule) -> Optional[RewriteRule]:
+    def extend_rule(self, rule: RewriteRule) -> Optional[RewriteRule]:
         """Form the match-extension of the given rule, if one is necessary.
 
         The operation is as follows:
@@ -143,6 +143,7 @@ class RewriteSystem(object):
         extend_temp = matchpy.make_dot_variable('__extend_temp')
         new_left = head_func(extend_temp, rule.left)
         new_right = head_func(extend_temp, rule.right)
+        new_right = self.normalize(new_right)
         return RewriteRule(new_left, new_right)
 
     def append_rule(self, rule: RewriteRule) -> None:
@@ -155,6 +156,7 @@ class RewriteSystem(object):
         extended = self.extend_rule(rule)
         if extended is not None:
             self.rules.append(extended)
+            print("Extending", rule, "->", extended)
             self.to_extension[rule] = extended
             self.from_extension[extended] = rule
 
@@ -195,14 +197,20 @@ class RewriteSystem(object):
             del self.to_extension[short]
         self.rules.delete(idx)
 
+    def remove_extension(self, idx) -> None:
+        """De-extend a rule, given the index of the extension"""
+        ext = self.rules[idx]
+        raw = self.from_extension[ext]
+        del self.from_extension[ext]
+        del self.to_extension[raw]
+        self.delete_rule(idx)
+
     def trim_redundant_rules(self) -> bool:
         """Remove rules that are specializations of
         or identical to rules in the set.
 
         :returns: True if any rules were removed"""
         for idx, r in enumerate(self.rules):
-            if r in self.from_extension:
-                continue
             # This only considers whole-expression matches
             for other_r, subst in self.rules.matcher.match(r.left):
                 if other_r == r:
@@ -210,13 +218,28 @@ class RewriteSystem(object):
 
                 if self.to_extension.get(r, None) == other_r:
                     continue
-                if self.from_extension.get(r, None) == other_r:
+
+                if (r in self.from_extension
+                     and self.from_extension[r] == other_r):  # noqa: E127
+                    print("Removing redundant self-extension", str(r))
+                    self.remove_extension(idx)
+                    self.trim_redundant_rules()
+                    return True
+
+                if (substitute(r.right, subst)
+                     != substitute(other_r.right, subst)):  # noqa: E127
                     continue
 
-                print("Removing redundant rule", str(r))
-                self.delete_rule(idx)
-                self.trim_redundant_rules()
-                return True
+                if r in self.from_extension:
+                    print("Removing redundant extension", str(r))
+                    self.remove_extension(idx)
+                    self.trim_redundant_rules()
+                    return True
+                else:
+                    print("Removing redundant rule", str(r))
+                    self.delete_rule(idx)
+                    self.trim_redundant_rules()
+                    return True
         return False
 
     def _canonicalize_system_step(self, order: GtOrder[Expression]) -> bool:
@@ -234,8 +257,6 @@ class RewriteSystem(object):
 
         # Normalize RHSs
         for idx, r in enumerate(self.rules):
-            if r in self.from_extension:
-                continue
             new_right = self.normalize(r.right)
             if not equal_mod_renaming(r.right, new_right):
                 new_rule = RewriteRule(r.left, new_right)
@@ -268,12 +289,28 @@ class RewriteSystem(object):
 
     def _add_critical_pairs_with(self, rule: RewriteRule) -> None:
         for other_rule in self.rules:
+
+            match_rules = [rule, other_rule]
+            representative = {rule: rule, other_rule: other_rule}
+            if rule in self.to_extension:
+                representative[self.to_extension[rule]] = rule
+                match_rules.append(self.to_extension[rule])
+            if other_rule in self.to_extension:
+                representative[self.to_extension[other_rule]] = other_rule
+                match_rules.append(self.to_extension[other_rule])
+            if rule in self.from_extension:
+                representative[self.from_extension[rule]] = rule
+                match_rules.append(self.from_extension[rule])
+            if other_rule in self.from_extension:
+                representative[self.from_extension[other_rule]] = other_rule
+                match_rules.append(self.from_extension[other_rule])
+
             for expr in chain(find_overlaps(rule.left, other_rule.left),
                               find_overlaps(other_rule.left, rule.left)):
                 matches = defaultdict(list)  # type: DefaultDict[RewriteRule, List[Expression]] # NOQA
-                for r, match in self.rules.apply_each_once(expr,
-                                                           [rule, other_rule]):
-                    matches[r].append(match)
+
+                for r, match in self.rules.apply_each_once(expr, match_rules):
+                    matches[representative[r]].append(match)
                 for s in matches[rule]:
                     for t in matches[other_rule]:
                         self.critical_pairs.push((s, t))
@@ -285,6 +322,9 @@ class RewriteSystem(object):
         """
         for i in self.rules:
             self._add_critical_pairs_with(i)
+
+        while self._canonicalize_system_step(order):
+            pass
 
         while self.critical_pairs:
             s, t = self.critical_pairs.popmin()

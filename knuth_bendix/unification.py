@@ -73,10 +73,12 @@ def maybe_add_substitution(sub: Substitution, var: str,
     or None if this isn't possible"""
     new_substitutions = {var: replacement}
     if matchpy.contains_variables_from_set(replacement, {var}):
+        # print("Failed occurs check", var, "→", replacement)
         return None  # Occurs check failed
     for v, term in sub.items():
         new_term = substitute(term, Substitution({var: replacement}))
         if matchpy.contains_variables_from_set(new_term, {v}):
+            print("Failed other occurs check", term, "/", v, "→", new_term, "under", var, "→", replacement)
             return None  # Occurs check failed
         if new_term != term:
             new_substitutions[v] = new_term
@@ -348,7 +350,6 @@ def ac_operand_lists(t1: Operation, t2: Operation)\
                             # Else case handled above
 
                         for idxs in np.transpose(np.nonzero(var_mat)):
-                            print(idxs)
                             row = t1_ops.vars[idxs[0]]
                             col = t2_ops.vars[idxs[1]]
                             t1_var_unifiers[row].append(col)
@@ -385,14 +386,16 @@ def unify_expressions(left: Expression,
     while operations:
         preserve_this = True
         ret, to_operate = operations.pop()
-
+        # print("Trace:","Have", ret, "processing", ", ".join(map(lambda x: str((str(x[0]), str(x[1]))), to_operate)))
         if not to_operate:  # Successful unification
             main_ret.append(ret)
             continue
 
         t1, t2 = to_operate.popleft()
+        # print("Try to unify", t1, "and", t2)
         if t1 == t2:
             operations.append((ret, to_operate))
+            # print("Equality continue")
             continue
 
         any_change = False
@@ -437,6 +440,10 @@ def unify_expressions(left: Expression,
                 a, b = to_operate.popleft()
                 new_a = substitute(a, ret)
                 new_b = substitute(b, ret)
+                if a != new_a:
+                    pass # print("Substituion modified", a, "→", new_a)
+                if b != new_b:
+                    pass # print("Substituion modified", b, "→", new_b)
                 new_queue.append((new_a, new_b))
             to_operate = new_queue
 
