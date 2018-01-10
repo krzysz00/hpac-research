@@ -1,0 +1,83 @@
+\documentclass[12pt,letterpaper]{article}
+
+\usepackage{mathtools}
+\usepackage{hyperref}
+\usepackage{biblatex}
+
+\addbibresource{all-cites.bib}
+
+\title{Summary of Project}
+\author{Krzysztof Drewniak, Henrik Bartels}
+\date{8 Jan 2018}
+\begin{document}
+\maketitle{}
+
+The aim of the project was to find a method to automatically generate the expression nomalization and/or property inference portions of Linnea from linear algebra knowledge in a known-correct fashion.
+We have investigated two possible approaches, neither of which yielded any immediately promising results: creating a term rewriting system using variants of Knuth-Bendix completion and integrating theorem provers into Linnea.
+
+\section{Rewrite systems}
+The first approach we investigated was generating a term rewriting system from the axioms of linear algebra and then completing it with a variant of the Knuth-Bendix algorithm.
+The concept behind this approach was to take the axioms of linear algebra and transform them into rewrite rules, such that, if two expressions rewrote to the same result under the rules, they were mathematically equivalent.
+The property that a set of rewrite rules must exhibit to fulfill this requirement is \emph{confluence}: informally, that it doesn't matter which order the rules are applied in.
+
+Overviews of the theory behind term rewriting systems, completion, and other such topics can be found in \cite{Baader1998,Plaisted1998}.
+
+Fortunately, the Knuth-Bendix algorithm, which is described in multiple sources such as \cite{Dick1991} can take a system of equations and generate a confluent rewriting system from it.
+Unfortunately, the algorithm can fail or fail to terminate under some circumstances.
+The general concept of the algorithm is that you repeatedly find cases where confluence fails (to do this, you try to unify all the left-hand sides and then apply the rule(s) we derived the expression from) and then, after normalizing the results of the two rewrites, insert those normalized terms as a rewrite rule.
+This process in continued until (hopefully) there are no more rules to add, at which point the system is completed.
+
+There are several subtleties that might be encountered while implementing this algorithm, such as needing to delete redundant rules, when new rules can be applied to existing rules, what order to search the possible extra rules in (the answer is ``shortest expression first'') and so on.
+Unfortunately, there don't seem to be any sources that present the algorithm in a clear, complete way, so this information needs to be cobbled together from various documents.
+
+One important issue is the ordering needed for the algorithm.
+To turn an equation into a rewrite rule, we need a procedure for determining which way the arrow points.
+Some of these are described in the books referenced above, as well as in, say \cite{Dershowitz1987}.
+A relevant one for this project was the lexicographical path ordering, which, roughly, takes a total ordering that tells you which operators/constants should be ``further in'' the expression.
+Recent projects like Slothorp\cite{Wehrman2006} (along with older projects like \cite{Dick1990}) have tried to autogenerate the ordering, but those didn't work in relevant cases (like rings).
+There was also a method to nondeterministically find a working ordering \cite{Plaisted}, but I didn't look into it much.
+
+The Knuth-Bendix algorithm is, in its unmodified form, not suitable for linear algebra's axioms.
+One major issues arises with commutativity, which is an axiom than generally can't be oriented.
+Fortunately, there are solutions for this.
+The general concept is to perform the completion modulo commtativity (or, more typically associativity and commutativity, giving ``AC'' completion).
+Algorithms for this can be pieced together from a few sources \cite{Bachmair1991} gives a good overview of AC rewriting and other extensions, as do the usual books, while \cite{Peterson1981} gives an effectively complete (although hard to understand) algorithm.
+The Peterson paper \cite{Peterson1981} also has several examples.
+It should be noted that, based on this paper, the code we have implement for Knuth-Bendix completion modulo AC (of $+$, in our case) has a bug that we have not been able to correct (good luck).
+
+There are two main tricky parts to AC rewriting as it's typically implemented.
+The first is that, for many rules, you need extended versions, where you add dummy arguments to the top level of the rule so that instances of the rule don't get skipped because pattern-matching doesn't work (managing this is nonobvious). The second is associative-commutative unification. This is, it should be noted, an NP-complete problem. The always-correct but slow algorithm is \cite{Stickel} (the underlying basis-finding algorithm is \cite{Lankford1989}), while the never-\emph{incorrect} algorithm we implemented is \cite{Lincoln1989}
+
+The next step after associative-commutative rewriting was figuring out how te integrate conditional rules, such as $A^T = A$ if $A$ is symmetric.
+We took a look at many-sorted or order-sorted completion \cite{Ganzinger1991,Goguen1985}, but it didn't have the power needed to express things like $AB$ is lower triangular if $A$ and $B$ are (it'd've been more appropriate for the case where there are several distinct types of things, like scalars, vectors, and matrices)
+Various conditional rewriting schemes found in the books and \cite{Marchiori1997} didn't have the power for the sort of back-and-forth we were wanting either.
+The straightforward step of doing things like $A^T \to \operatorname{issymmetric}(A, A)$ quickly resulted in systems that were impossible to consistently order, and so was useless in practice.
+This showed that the conditional parts of the linear algebra axioms were a major barrier to making the rewrite-rule approach work.
+
+Another issue was the fact that matrix multiplication is associative but not commutative.
+Associativity sort of works as a rewrite rule such as $(xy)z \to x(yz)$, but this is known not to capture all equivalences in some cases.
+Treating associative operators like AC ones (rewriting modulo them) runs into the problem that there can be infinitely many ways to unify two expressions involving an associative-only operator where one isn't a specialization of another.
+The main example is that, with associative $\cdot$ and constant $a$, $xa$ and $ax$ can have the substitutions $\{x \to a\}, \{x \to aa\}, \{x \to aaa\}$ and so on, where none of those can be transformed into any of the other ones with a substitution.
+
+These two issues combined to make the Knuth-Bendix-based approach infeasible, and so it was abandoned.
+
+\section{Theorem provers}
+Since rewrite rules weren't working, we decided to turn to various automated and semi-automated theorem provers.
+The idea was to call out to these programs to prove some combination of the properties of expressions (under given input assumptions about matrices) or the equivalence of expressions.
+As an initial test-case, we tried to implement some very basic property inference.
+
+One program we investigated was E (\url{http://wwwlehre.dhbw-stuttgart.de/~sschulz/E/E.html}), which implements first-order logic with equality.
+The input format is TPTP (\url{http://www.cs.miami.edu/~tptp/}), which is rather poorly documented.
+The drawbacks of E were that it does not always terminate on false theorems, there seems to be some issue that results in non-theorems being true under the axioms we developed, and that the system does not implement the natural numbers natievly, which means they would need to be constructed if needed.
+E is, however, rather fast, and it has a server mode that would have been quite useful in Linnea.
+
+The other tool we investigated was Lean \cite{LeanIntro2017,Avigad2017}.
+Lean is a dependently-typed ``programming language'' that proves theorems but is rather awkward to use in practice at this time.
+This meant that efforts to formalize property inference in Lean were rather unsuccessful.
+(Lean does also have a server mode, as seen is \cite{Lewis2017}).
+It should be noted that the Centigrad project\cite{Selsam2017} has successfully used Lean to write formally-correct machine-learning algorithms in the style of Tensorflow, and that their approach and/or code might be useful for our use-case eventually.
+
+Much of the software we investigated was not yet suitable for our purposes or inconvenient to use, so the theorem-prover approach has also not yielded useful results.
+
+\printbibliography{}
+\end{document}

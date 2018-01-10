@@ -1,0 +1,65 @@
+\documentclass{beamer}
+\usepackage{mathtools,amssymb}
+\usepackage{hyperref}
+\usepackage[utf8]{inputenc}
+\useoutertheme{infolines}
+\setbeamertemplate{navigation symbols}{}
+
+\title[]{Project overview/update}
+\author[]{Krzysztof Drewniak}
+\institute[]{HPAC}
+\date[]{1 Dec 2017}
+
+\begin{document}
+\begin{frame}[plain]
+\titlepage{}
+\end{frame}
+
+\begin{frame}
+  \frametitle{Project goal}
+  \begin{itemize}
+  \item Automatic generation of \{expression equality checker, normalizer, property inference\}
+  \item Current code is fragile and hard to extend
+  \item Something easier to add to would be nice
+  \end{itemize}
+\end{frame}
+
+\begin{frame}
+  \frametitle{Initial approach: rewrite rules}
+  \begin{itemize}
+  \item Use completion algorithm to make a confluent rewrite system
+  \item Confluence: apply rules in any order and get some results
+    \begin{itemize}
+    \item Consider $y + x + -x \to y$ on $x + -x + -(-x)$.
+    \item Can get $-(-x)$ or $x$ as final result
+    \item Need to add $-(-x) = x$ to fix
+    \end{itemize}
+  \item (Done) Base Knuth-Bendix algorithm and syntactic unification
+  \item (Near done) Associative-commutative completion and unification
+    \begin{itemize}
+    \item One small bug in there somewhere maybe
+    \end{itemize}
+  \item (\textbf{Failed}) Rewrite rules conditioned on properties
+    \begin{itemize}
+    \item Trying to represent these as unconditional equations gets unwieldy and prevents sensible results
+    \item Also, associativity only sort of works ($(AB)C \to A(BC)$ does not cover all cases)
+    \end{itemize}
+  \end{itemize}
+\end{frame}
+
+\begin{frame}
+  \frametitle{The future: theorem provers?}
+  \begin{itemize}
+  \item Property inference and equality checking are all first-order logic things
+  \item We could delegate that to a theorem prover, potentially
+  \item Could also enable more stuff like bandwidth properties (generalization of diagonal, triangular, etc.)
+  \item Potential tools
+    \begin{itemize}
+    \item Prolog (might not be expressive enough)
+    \item E (first order logic, but nothing else --- we'd need to roll our own $\mathbb{N}$)
+    \item SMT solvers like z3 (seem to be very well developed, may not solve our problem)
+    \item Coq \emph{et al} don't fit our problem type
+    \end{itemize}
+  \end{itemize}
+\end{frame}
+\end{document}
